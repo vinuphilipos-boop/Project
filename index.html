@@ -2,14 +2,26 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="description" content="Prioritize tasks by urgency and importance." />
+  <meta name="theme-color" content="#1f2328" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Eisenhower" />
   <title>Eisenhower Box</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="icons/icon-180.png" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <header>
-    <h1>Eisenhower Box</h1>
-    <p class="subtitle">Sort tasks by urgency and importance. Drag tasks between boxes.</p>
+    <div>
+      <h1>Eisenhower Box</h1>
+      <p class="subtitle">Sort tasks by urgency and importance. Drag tasks, or use the menu on each task to move it.</p>
+    </div>
+    <button id="install-btn" type="button" hidden>Install app</button>
   </header>
 
   <form id="task-form" autocomplete="off">
@@ -42,7 +54,10 @@
   </main>
 
   <footer>
-    <button id="clear-done" type="button">Clear completed</button>
+    <button id="export-btn" type="button" class="secondary">Export</button>
+    <label class="button secondary" for="import-file">Import</label>
+    <input id="import-file" type="file" accept="application/json,.json" hidden />
+    <button id="clear-done" type="button" class="secondary">Clear completed</button>
   </footer>
 
   <script src="app.js"></script>

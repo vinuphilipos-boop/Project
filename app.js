@@ -7,6 +7,16 @@
   const importantInput = document.getElementById("important-input");
   const clearDoneBtn = document.getElementById("clear-done");
   const quadrants = document.querySelectorAll(".quadrant");
+  const exportBtn = document.getElementById("export-btn");
+  const importFile = document.getElementById("import-file");
+  const installBtn = document.getElementById("install-btn");
+
+  const QUADRANTS = [
+    ["do", "Do"],
+    ["schedule", "Schedule"],
+    ["delegate", "Delegate"],
+    ["delete", "Delete"],
+  ];
 
   let tasks = load();
 
@@ -86,6 +96,18 @@
       render();
     });
 
+    // Move menu: works on touch devices where drag-and-drop doesn't.
+    const move = document.createElement("select");
+    move.className = "move";
+    move.setAttribute("aria-label", "Move to box");
+    QUADRANTS.forEach(([value, label]) => move.add(new Option(label, value)));
+    move.value = task.quadrant;
+    move.addEventListener("change", () => {
+      task.quadrant = move.value;
+      save();
+      render();
+    });
+
     li.addEventListener("dragstart", (e) => {
       e.dataTransfer.setData("text/plain", task.id);
       e.dataTransfer.effectAllowed = "move";
@@ -93,7 +115,7 @@
     });
     li.addEventListener("dragend", () => li.classList.remove("dragging"));
 
-    li.append(checkbox, text, del);
+    li.append(checkbox, text, move, del);
     return li;
   }
 
@@ -138,6 +160,55 @@
     save();
     render();
   });
+
+  exportBtn.addEventListener("click", () => {
+    const blob = new Blob([JSON.stringify(tasks, null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `eisenhower-tasks-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  });
+
+  importFile.addEventListener("change", async () => {
+    const file = importFile.files[0];
+    importFile.value = "";
+    if (!file) return;
+    try {
+      const data = JSON.parse(await file.text());
+      const valid = QUADRANTS.map(([v]) => v);
+      if (!Array.isArray(data)) throw new Error("not a list");
+      const imported = data
+        .filter((t) => t && typeof t.text === "string" && valid.includes(t.quadrant))
+        .map((t) => ({ id: String(t.id || Math.random().toString(36).slice(2)), text: t.text, quadrant: t.quadrant, done: !!t.done }));
+      if (!confirm(`Replace your current ${tasks.length} task(s) with ${imported.length} imported task(s)?`)) return;
+      tasks = imported;
+      save();
+      render();
+    } catch {
+      alert("That file couldn't be imported. Choose a file created with Export.");
+    }
+  });
+
+  // Install prompt (Chrome/Edge/Android). iOS uses Share → Add to Home Screen.
+  let deferredPrompt = null;
+  window.addEventListener("beforeinstallprompt", (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    installBtn.hidden = false;
+  });
+  installBtn.addEventListener("click", async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    await deferredPrompt.userChoice;
+    deferredPrompt = null;
+    installBtn.hidden = true;
+  });
+  window.addEventListener("appinstalled", () => (installBtn.hidden = true));
+
+  if ("serviceWorker" in navigator && location.protocol !== "file:") {
+    navigator.serviceWorker.register("sw.js");
+  }
 
   render();
 })();
