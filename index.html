@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Eisenhower Box</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header>
+    <h1>Eisenhower Box</h1>
+    <p class="subtitle">Sort tasks by urgency and importance. Drag tasks between boxes.</p>
+  </header>
+
+  <form id="task-form" autocomplete="off">
+    <input id="task-input" type="text" placeholder="What needs doing?" required maxlength="200" />
+    <label><input id="urgent-input" type="checkbox" /> Urgent</label>
+    <label><input id="important-input" type="checkbox" /> Important</label>
+    <button type="submit">Add task</button>
+  </form>
+
+  <main class="matrix">
+    <div class="axis axis-top"><span>Urgent</span><span>Not urgent</span></div>
+    <div class="axis axis-side"><span>Important</span><span>Not important</span></div>
+
+    <section class="quadrant q1" data-quadrant="do">
+      <h2>Do <small>Urgent &amp; important</small></h2>
+      <ul class="task-list"></ul>
+    </section>
+    <section class="quadrant q2" data-quadrant="schedule">
+      <h2>Schedule <small>Not urgent &amp; important</small></h2>
+      <ul class="task-list"></ul>
+    </section>
+    <section class="quadrant q3" data-quadrant="delegate">
+      <h2>Delegate <small>Urgent &amp; not important</small></h2>
+      <ul class="task-list"></ul>
+    </section>
+    <section class="quadrant q4" data-quadrant="delete">
+      <h2>Delete <small>Not urgent &amp; not important</small></h2>
+      <ul class="task-list"></ul>
+    </section>
+  </main>
+
+  <footer>
+    <button id="clear-done" type="button">Clear completed</button>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
