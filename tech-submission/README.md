@@ -41,7 +41,7 @@ need, and get one PDF with numbered pages.
    - for each section, use **Select from library** or **Upload for this project**. Library documents
      whose name or tags match a model or wattage in the schedule are labelled *matching*.
    - change the order with ↑ ↓. Use **To library** to keep a project file for later projects.
-4. **Generate submission PDF**. The PDF gets a cover with a client approval box, an index, the
+4. **Generate submission PDF**. The PDF gets the cover page, an index, the
    schedule of materials, divider pages, all the documents, and a footer
    (`LT | ref no. | Sub. no. | Rev | Page x of y`) on every page.
 
