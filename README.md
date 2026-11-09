@@ -1,5 +1,6 @@
 > **Also in this repository:** [Technical Submission Builder](tech-submission/README.md), which builds
-> street lighting technical submissions for client approval (`/tech-submission/`).
+> street lighting technical submissions for client approval. It is installable and is published at
+> https://vinuphilipos-boop.github.io/Project/tech-submission/
 
 # Eisenhower Box
 

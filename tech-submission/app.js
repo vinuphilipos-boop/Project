@@ -1403,3 +1403,29 @@ async function load() {
 load()
   .then(() => show("projects"))
   .catch((err) => toast("Could not open browser storage: " + err.message, true));
+
+/* ------------------------------------------------------------------ */
+/* Installable app                                                     */
+/* ------------------------------------------------------------------ */
+// Chrome / Edge / Android show the Install button; iPhone and iPad use Share → Add to Home Screen.
+let installPrompt = null;
+window.addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault();
+  installPrompt = e;
+  $("#install-btn").hidden = false;
+});
+$("#install-btn").addEventListener("click", async () => {
+  if (!installPrompt) return;
+  installPrompt.prompt();
+  await installPrompt.userChoice;
+  installPrompt = null;
+  $("#install-btn").hidden = true;
+});
+window.addEventListener("appinstalled", () => ($("#install-btn").hidden = true));
+
+// Ask the browser to keep stored documents even when disk space runs low.
+if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+
+if ("serviceWorker" in navigator && location.protocol !== "file:") {
+  navigator.serviceWorker.register("sw.js").catch((err) => console.warn("Offline support unavailable:", err));
+}

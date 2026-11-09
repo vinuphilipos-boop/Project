@@ -65,19 +65,39 @@ Everything stays in this browser (IndexedDB). Nothing is uploaded to a server. U
 **Company settings → Export backup** to save a backup file, and **Import backup** to restore it on
 another computer.
 
-## Run it
+## Open and install it
 
-It is a static site. With GitHub Pages switched on for this repository it is at
-`https://vinuphilipos-boop.github.io/Project/tech-submission/`. To run it locally:
+**Web link:** https://vinuphilipos-boop.github.io/Project/tech-submission/
+
+GitHub Pages must be switched on for the repository (Settings → Pages → *Deploy from a branch*,
+`master`, `/ (root)`).
+
+Install it to get its own icon and window. It works offline after the first visit:
+
+- **Windows / Mac (Chrome or Edge):** click **Install app** at the top right of the page, or the
+  install icon in the address bar.
+- **Android (Chrome):** tap **Install app**, or menu ⋮ → *Install app*.
+- **iPhone / iPad (Safari):** tap **Share** → **Add to Home Screen**.
+
+The installed app and the web link share the same data in that browser. Updates come in
+automatically the next time it is opened online.
+
+**Without internet or GitHub:** download the repository ZIP, unzip it, and double-click
+`tech-submission/index.html`. Everything works except installing.
+
+**Run locally for development:**
 
 ```sh
 python3 -m http.server 8000   # from the repository root
 ```
 
-and open http://localhost:8000/tech-submission/.
+then open http://localhost:8000/tech-submission/.
+
+**Releasing updates:** when you change any app file, bump `CACHE_VERSION` in
+`tech-submission/sw.js` (e.g. `tech-submission-v2`) so installed copies pick up the new version.
 
 PDF merging uses [pdf-lib](https://pdf-lib.js.org/) (MIT), which is included in `vendor/`, so the
-app also works without internet access.
+app works without internet access.
 
 ## Limits of this sample
 

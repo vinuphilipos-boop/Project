@@ -138,3 +138,8 @@ h4 { margin: 1rem 0 .4rem; font-size: .92rem; }
   .cover-preview iframe { display: none; } /* phone browsers rarely show PDFs inline; use the button */
   .party { grid-template-columns: 1fr 1fr; }
 }
+
+/* install button in the header */
+.topbar-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+.install-btn { background: #ffd54a; border-color: #ffd54a; color: #13283f; font-weight: 600; white-space: nowrap; }
+.install-btn[hidden] { display: none; }
