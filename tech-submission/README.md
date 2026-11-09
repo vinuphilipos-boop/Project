@@ -75,7 +75,8 @@ GitHub Pages must be switched on for the repository (Settings → Pages → *Dep
 Install it to get its own icon and window. It works offline after the first visit:
 
 - **Windows / Mac (Chrome or Edge):** click **Install app** at the top right of the page, or the
-  install icon in the address bar.
+  install icon in the address bar. If the browser isn't ready to install yet, the button explains the
+  menu steps for that browser.
 - **Android (Chrome):** tap **Install app**, or menu ⋮ → *Install app*.
 - **iPhone / iPad (Safari):** tap **Share** → **Add to Home Screen**.
 
