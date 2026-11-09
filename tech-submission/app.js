@@ -1407,21 +1407,75 @@ load()
 /* ------------------------------------------------------------------ */
 /* Installable app                                                     */
 /* ------------------------------------------------------------------ */
-// Chrome / Edge / Android show the Install button; iPhone and iPad use Share → Add to Home Screen.
+// The button is always shown (except inside the installed app). Chrome / Edge / Android give us an
+// install prompt; everywhere else, clicking it explains how to install in that browser.
+const PUBLIC_URL = "https://vinuphilipos-boop.github.io/Project/tech-submission/";
 let installPrompt = null;
+const isInstalled = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+$("#install-btn").hidden = isInstalled();
+
 window.addEventListener("beforeinstallprompt", (e) => {
   e.preventDefault();
   installPrompt = e;
-  $("#install-btn").hidden = false;
 });
-$("#install-btn").addEventListener("click", async () => {
-  if (!installPrompt) return;
-  installPrompt.prompt();
-  await installPrompt.userChoice;
+window.addEventListener("appinstalled", () => {
   installPrompt = null;
   $("#install-btn").hidden = true;
+  toast("Installed. Open it from your Start menu, Dock or home screen.");
 });
-window.addEventListener("appinstalled", () => ($("#install-btn").hidden = true));
+
+function installHelp() {
+  const ua = navigator.userAgent;
+  const ios = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+  const edge = /Edg\//.test(ua);
+  const chrome = /Chrome\//.test(ua) && !edge && !/OPR\//.test(ua);
+  const android = /Android/.test(ua);
+  const firefox = /Firefox\//.test(ua);
+  const safari = /Safari\//.test(ua) && !/Chrome|CriOS|FxiOS|EdgiOS/.test(ua);
+  const link = `<p><a href="${PUBLIC_URL}" target="_blank" rel="noopener">${PUBLIC_URL}</a></p>`;
+
+  if (location.protocol === "file:") {
+    return `<p>This copy was opened from a file on your computer, and browsers can only install apps from a web link.</p>
+      <p>Open the web link in Chrome or Edge, then click <b>Install app</b> there:</p>${link}
+      <p class="hint">The installed app keeps its own data. To bring your projects and library over, use
+      <b>Company settings → Export backup</b> here, then <b>Import backup</b> in the installed app.</p>`;
+  }
+  if (ios) {
+    return `<p>On iPhone and iPad, open this page in <b>Safari</b>, then:</p>
+      <ol><li>Tap the <b>Share</b> button (square with an arrow).</li><li>Tap <b>Add to Home Screen</b>, then <b>Add</b>.</li></ol>`;
+  }
+  if (android) {
+    return `<p>In <b>Chrome</b>, tap the menu <b>⋮</b> (top right), then <b>Install app</b> or <b>Add to Home screen</b>.</p>`;
+  }
+  if (edge) {
+    return `<p>In <b>Edge</b>, click the menu <b>…</b> (top right) → <b>Apps</b> → <b>Install this site as an app</b>.
+      You may also see an install icon at the right end of the address bar.</p>`;
+  }
+  if (chrome) {
+    return `<p>In <b>Chrome</b>, click the install icon at the right end of the address bar (a monitor with a down arrow), or
+      the menu <b>⋮</b> → <b>Cast, save and share</b> → <b>Install page as app</b>.</p>
+      <p class="hint">If neither is there, reload the page once and wait a few seconds; Chrome only offers installation after the
+      page has fully loaded over HTTPS.</p>`;
+  }
+  if (safari) {
+    return `<p>In <b>Safari</b> on Mac: <b>File</b> → <b>Add to Dock</b> (macOS Sonoma or later).</p>`;
+  }
+  if (firefox) {
+    return `<p>Firefox on computers can't install web apps. Open this link in <b>Chrome</b> or <b>Edge</b> and click <b>Install app</b>:</p>${link}`;
+  }
+  return `<p>Open this link in <b>Chrome</b> or <b>Edge</b> and click <b>Install app</b>:</p>${link}`;
+}
+
+$("#install-btn").addEventListener("click", async () => {
+  if (installPrompt) {
+    installPrompt.prompt();
+    await installPrompt.userChoice;
+    installPrompt = null;
+    return;
+  }
+  $("#install-help-body").innerHTML = installHelp();
+  $("#install-help").showModal();
+});
 
 // Ask the browser to keep stored documents even when disk space runs low.
 if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});

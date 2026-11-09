@@ -143,3 +143,5 @@ h4 { margin: 1rem 0 .4rem; font-size: .92rem; }
 .topbar-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
 .install-btn { background: #ffd54a; border-color: #ffd54a; color: #13283f; font-weight: 600; white-space: nowrap; }
 .install-btn[hidden] { display: none; }
+#install-help-body p, #install-help-body ol { margin: .5rem 0; line-height: 1.45; }
+#install-help-body a { color: var(--accent); word-break: break-all; }

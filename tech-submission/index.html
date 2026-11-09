@@ -20,7 +20,7 @@
       <h1>Technical Submission Builder</h1>
       <p class="subtitle">Street lighting submissions for client approval: pick documents, fill project data, generate one PDF.</p>
     </div>
-    <button type="button" id="install-btn" class="install-btn" hidden>Install app</button>
+    <button type="button" id="install-btn" class="install-btn">⤓ Install app</button>
     </div>
     <nav class="tabs" role="tablist">
       <button type="button" class="tab" data-view="projects" aria-selected="true">Projects</button>
@@ -186,6 +186,15 @@
         <button value="cancel">Cancel</button>
         <button value="ok" class="primary" id="picker-ok">Add selected</button>
       </div>
+    </form>
+  </dialog>
+
+  <!-- How to install, when the browser has no install prompt to offer -->
+  <dialog id="install-help">
+    <form method="dialog" class="dialog-body">
+      <h3>Install Technical Submission Builder</h3>
+      <div id="install-help-body"></div>
+      <div class="dialog-actions"><button value="close" class="primary">OK</button></div>
     </form>
   </dialog>
 
