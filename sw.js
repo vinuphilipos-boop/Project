@@ -20,7 +20,8 @@ self.addEventListener("install", (event) => {
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE_VERSION).map((k) => caches.delete(k)))
+      // only this app's old caches: other apps on the site (tech-submission/) keep theirs
+      Promise.all(keys.filter((k) => k.startsWith("eisenhower-") && k !== CACHE_VERSION).map((k) => caches.delete(k)))
     )
   );
   self.clients.claim();
