@@ -9,7 +9,7 @@ need, and get one PDF with numbered pages.
 
 | No. | Section | Source |
 |-----|---------|--------|
-| 1 | Cover page | Generated from project details (or upload a custom cover) |
+| 1 | Cover page | Generated from project details in the layout of `MAIN COVER PAGE.docx` (or upload a custom cover) |
 | – | Index | Generated, with page numbers |
 | – | Schedule of materials | Generated from the luminaire and pole tables |
 | 2 | LT Company Profile | Library / project upload |
@@ -32,7 +32,11 @@ need, and get one PDF with numbered pages.
    (e.g. `90W, ABC-90`). If a data sheet gets a new revision, use **Replace**, and every project that
    uses it picks up the new file.
 3. **Projects → + New project** (or **Duplicate** a previous one):
-   - fill in the project details (client, consultant, reference no., submission no., revision, date)
+   - fill in the project details (short name, location, reference no., submission no., revision, date)
+   - fill in the **cover page**: the full project title (printed after "PROJECT:"), the heading
+     (e.g. "LED STREETLIGHTING PROPOSAL"), and up to 4 parties, each with a role, name and logo
+     (e.g. Concessionaire / Client / Independent Engineer). A live preview sits next to the form.
+     Logos are remembered, so typing a party name used in an earlier project fills in its logo.
    - fill in the luminaire and pole schedules
    - for each section, use **Select from library** or **Upload for this project**. Library documents
      whose name or tags match a model or wattage in the schedule are labelled *matching*.
@@ -40,6 +44,20 @@ need, and get one PDF with numbered pages.
 4. **Generate submission PDF**. The PDF gets a cover with a client approval box, an index, the
    schedule of materials, divider pages, all the documents, and a footer
    (`LT | ref no. | Sub. no. | Rev | Page x of y`) on every page.
+
+## Cover page
+
+The default cover follows the company template (`MAIN COVER PAGE.docx`):
+
+- a page border
+- a blue, bold, centred **PROJECT:** title that shrinks to fit long titles
+- the underlined heading
+- the parties in columns, each with its role, logo and name
+- **SUBMITTED BY**, with the company logo (from Company settings) and the company name
+- a document control line (doc. no., submission no., revision, date)
+
+**Company settings → Cover page style** can switch to a simple cover instead: a details table with a
+client approval box (Approved / Approved as noted / Revise and resubmit / Rejected).
 
 ## Where the data is kept
 

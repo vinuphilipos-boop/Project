@@ -41,14 +41,10 @@
       </div>
 
       <div class="panel">
-        <h3>1. Project details <span class="muted">(used on the cover page and in the footer)</span></h3>
+        <h3>1. Project details <span class="muted">(used in the footer, index and file name)</span></h3>
         <form id="project-form" class="grid-form" autocomplete="off">
-          <label>Project name<input name="name" required /></label>
-          <label>Client<input name="client" /></label>
-          <label>Consultant / PMC<input name="consultant" /></label>
-          <label>Main contractor<input name="contractor" /></label>
+          <label>Short project name <span class="muted">(project list and file name)</span><input name="name" required /></label>
           <label>Location<input name="location" /></label>
-          <label>Subject<input name="subject" /></label>
           <label>Document / reference no.<input name="refNo" /></label>
           <label>Submission no.<input name="submissionNo" /></label>
           <label>Revision<input name="revision" /></label>
@@ -57,7 +53,38 @@
       </div>
 
       <div class="panel">
-        <h3>2. Luminaire schedule <span class="muted">(changes per project)</span></h3>
+        <h3>2. Cover page <span class="muted">(the preview updates as you type)</span></h3>
+        <div class="cover-grid">
+          <div>
+            <form id="cover-form" class="grid-form one" autocomplete="off">
+              <label>Project title <span class="muted">(printed after "PROJECT:")</span><textarea name="coverTitle" rows="5"></textarea></label>
+              <label>Cover heading<input name="coverSubtitle" list="cover-headings" /></label>
+            </form>
+            <datalist id="cover-headings">
+              <option value="LED STREETLIGHTING PROPOSAL"></option>
+              <option value="TECHNICAL SUBMISSION FOR APPROVAL"></option>
+              <option value="LED STREETLIGHTING - TECHNICAL SUBMISSION"></option>
+            </datalist>
+            <h4>Parties on the cover <span class="muted">(up to 4, left to right)</span></h4>
+            <div id="party-list"></div>
+            <button type="button" class="small" id="add-party">+ Add party</button>
+            <p class="hint">Logos are remembered: type a party name used in an earlier project and its logo is filled in for you.</p>
+            <datalist id="party-roles">
+              <option value="CONCESSIONAIRE"></option><option value="CLIENT"></option><option value="INDEPENDENT ENGINEER"></option>
+              <option value="AUTHORITY ENGINEER"></option><option value="CONSULTANT"></option><option value="PMC"></option>
+              <option value="EPC CONTRACTOR"></option><option value="CONTRACTOR"></option>
+            </datalist>
+            <datalist id="party-names"></datalist>
+          </div>
+          <div class="cover-preview">
+            <iframe id="cover-preview" title="Cover page preview"></iframe>
+            <button type="button" class="small" id="open-cover">Open preview in new tab</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>3. Luminaire schedule <span class="muted">(changes per project)</span></h3>
         <table class="edit-table" id="lum-table">
           <thead><tr><th>Description / application</th><th>Make</th><th>Model</th><th>Wattage (W)</th><th>Qty</th><th></th></tr></thead>
           <tbody></tbody>
@@ -73,7 +100,7 @@
       </div>
 
       <div class="panel">
-        <h3>3. Contents of the submission</h3>
+        <h3>4. Contents of the submission</h3>
         <div class="options">
           <label><input type="checkbox" name="optIndex" /> Index page with page numbers</label>
           <label><input type="checkbox" name="optSchedule" /> Schedule of materials page</label>
@@ -117,9 +144,13 @@
           <label>Company short name <span class="muted">(used in section titles, e.g. "LT Company Profile")</span><input name="shortName" /></label>
           <label>Company full name<input name="fullName" /></label>
           <label class="wide">Address / contact line<input name="address" /></label>
-          <label>Submission title<input name="title" /></label>
+          <label>Submission title <span class="muted">(simple cover only)</span><input name="title" /></label>
           <label>Prepared by<input name="preparedBy" /></label>
-          <label>Company logo (PNG / JPG)<input type="file" name="logo" accept="image/png,image/jpeg" /></label>
+          <label>Cover page style<select name="coverStyle">
+            <option value="project">Project cover (title, parties with logos, submitted by)</option>
+            <option value="simple">Simple cover (details table and client approval box)</option>
+          </select></label>
+          <label>Company logo (PNG / JPG) <span class="muted">(shown under "Submitted by")</span><input type="file" name="logo" accept="image/png,image/jpeg" /></label>
           <div id="logo-preview" class="logo-preview"></div>
           <div class="wide"><button type="submit" class="primary">Save settings</button></div>
         </form>

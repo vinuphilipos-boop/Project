@@ -34,10 +34,11 @@ const LIBRARY_SECTIONS = LEAVES.filter((s) => !s.generated); // the cover is gen
 const DEFAULT_SETTINGS = {
   key: "company",
   shortName: "LT",
-  fullName: "Your Company Name",
+  fullName: "LIGHTING TECHNOLOGIES INDIA PVT LTD",
   address: "Address line / phone / email",
   title: "TECHNICAL SUBMISSION FOR APPROVAL",
   preparedBy: "",
+  coverStyle: "project", // "project" = your Word cover layout, "simple" = details table + approval box
   logo: null, // { data: ArrayBuffer, mime }
 };
 
@@ -195,7 +196,7 @@ $$(".tab").forEach((t) =>
 /* ------------------------------------------------------------------ */
 function renderSettings() {
   const f = $("#settings-form");
-  for (const k of ["shortName", "fullName", "address", "title", "preparedBy"]) f.elements[k].value = state.settings[k] || "";
+  for (const k of ["shortName", "fullName", "address", "title", "preparedBy", "coverStyle"]) f.elements[k].value = state.settings[k] || "";
   f.elements.logo.value = "";
   const prev = $("#logo-preview");
   prev.innerHTML = "";
@@ -208,7 +209,7 @@ function renderSettings() {
 $("#settings-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const f = e.target;
-  for (const k of ["shortName", "fullName", "address", "title", "preparedBy"]) state.settings[k] = f.elements[k].value.trim();
+  for (const k of ["shortName", "fullName", "address", "title", "preparedBy", "coverStyle"]) state.settings[k] = f.elements[k].value.trim();
   const logo = f.elements.logo.files[0];
   if (logo) state.settings.logo = { data: await logo.arrayBuffer(), mime: logo.type };
   await DB.put("settings", state.settings);
@@ -347,12 +348,32 @@ $("#lib-upload").addEventListener("submit", async (e) => {
 /* ------------------------------------------------------------------ */
 /* Projects                                                            */
 /* ------------------------------------------------------------------ */
+const DEFAULT_PARTIES = ["CONCESSIONAIRE", "CLIENT", "INDEPENDENT ENGINEER"];
+const MAX_PARTIES = 4;
+
+// Older projects had separate client / consultant / contractor fields.
+function migrateProject(p) {
+  if (!p.parties) {
+    p.parties = [
+      { role: "CONCESSIONAIRE", name: p.contractor || "", logo: null },
+      { role: "CLIENT", name: p.client || "", logo: null },
+      { role: "INDEPENDENT ENGINEER", name: p.consultant || "", logo: null },
+    ];
+  }
+  p.coverTitle ??= p.name || "";
+  p.coverSubtitle ??= "LED STREETLIGHTING PROPOSAL";
+  return p;
+}
+const clientName = (p) => (p.parties || []).find((x) => /client/i.test(x.role))?.name || p.client || "";
+
 function newProject() {
   return {
     id: uid(),
     name: "New project",
-    client: "", consultant: "", contractor: "", location: "",
-    subject: "Technical submission for street lighting works",
+    location: "",
+    coverTitle: "",
+    coverSubtitle: "LED STREETLIGHTING PROPOSAL",
+    parties: DEFAULT_PARTIES.map((role) => ({ role, name: "", logo: null })),
     refNo: "", submissionNo: "01", revision: "R0", date: today(),
     luminaires: [{ desc: "Street light", make: "", model: "", wattage: "", qty: "" }],
     poles: [{ type: "Octagonal GI pole", height: "", dims: "", bracket: "", qty: "" }],
@@ -376,7 +397,7 @@ function renderProjects() {
       const watts = p.luminaires.map((l) => l.wattage).filter(Boolean).map((w) => w + "W").join(", ");
       return `<div class="card" data-id="${p.id}">
         <h3>${esc(p.name)}</h3>
-        <div class="meta">${esc(p.client || "No client")} · ${esc(p.refNo || "no ref")} · Sub. ${esc(p.submissionNo)} ${esc(p.revision)}</div>
+        <div class="meta">${esc(clientName(p) || "No client")} · ${esc(p.refNo || "no ref")} · Sub. ${esc(p.submissionNo)} ${esc(p.revision)}</div>
         <div class="meta">${nDocs} document(s)${watts ? " · " + esc(watts) : ""} · updated ${p.updatedAt.slice(0, 10)}</div>
         <div class="actions">
           <button type="button" class="primary" data-act="open">Open</button>
@@ -439,16 +460,17 @@ $("#back-to-projects").addEventListener("click", async () => {
 
 function openProject(id) {
   state.current = state.projects.find((p) => p.id === id);
-  const p = state.current;
+  const p = migrateProject(state.current);
   p.options = { ...DEFAULT_OPTIONS, ...(p.options || {}) };
   for (const s of LEAVES) p.sections[s.key] ||= [];
-  const f = $("#project-form");
-  for (const el of f.elements) if (el.name) el.value = p[el.name] ?? "";
+  for (const f of [$("#project-form"), $("#cover-form")]) for (const el of f.elements) if (el.name) el.value = p[el.name] ?? "";
   for (const k of Object.keys(DEFAULT_OPTIONS)) $(`input[name="${k}"]`).checked = !!p.options[k];
   $("#editor-title").textContent = p.name;
   renderRows();
+  renderParties();
   renderSections();
   show("editor");
+  refreshCoverPreview(0);
 }
 
 let saveTimer;
@@ -466,12 +488,140 @@ async function saveProject() {
   $("#save-state").textContent = "Saved";
 }
 
-$("#project-form").addEventListener("input", (e) => {
+for (const form of ["#project-form", "#cover-form"]) {
+  $(form).addEventListener("input", (e) => {
+    const p = state.current;
+    p[e.target.name] = e.target.value;
+    if (e.target.name === "name") $("#editor-title").textContent = p.name || "Project";
+    scheduleSave();
+    refreshCoverPreview();
+  });
+}
+
+/* ---- parties on the cover ---- */
+function renderParties() {
   const p = state.current;
-  p[e.target.name] = e.target.value;
-  if (e.target.name === "name") $("#editor-title").textContent = p.name || "Project";
+  $("#party-list").innerHTML = p.parties
+    .map(
+      (x, i) => `<div class="party" data-i="${i}">
+        <input data-f="role" list="party-roles" value="${esc(x.role)}" placeholder="Role, e.g. CLIENT" />
+        <input data-f="name" list="party-names" value="${esc(x.name)}" placeholder="Name, e.g. NATIONAL HIGHWAYS AUTHORITY OF INDIA" />
+        <div class="party-logo">${x.logo ? `<img src="${x.logo}" alt="" />` : "No logo"}</div>
+        <div class="party-actions">
+          <label class="button-like small">Logo<input type="file" data-act="logo" accept="image/png,image/jpeg" hidden /></label>
+          ${x.logo ? `<button type="button" class="icon" data-act="nologo" title="Remove logo">No logo</button>` : ""}
+          <button type="button" class="icon" data-act="left" ${i === 0 ? "disabled" : ""} title="Move left">↑</button>
+          <button type="button" class="icon danger" data-act="del" title="Remove party">✕</button>
+        </div></div>`
+    )
+    .join("");
+  $("#add-party").disabled = p.parties.length >= MAX_PARTIES;
+  $("#party-names").innerHTML = [...knownParties().keys()].map((n) => `<option value="${esc(n)}"></option>`).join("");
+}
+
+// Every party name used in any project, with the most recent logo for it.
+function knownParties() {
+  const map = new Map();
+  const projects = [...state.projects].sort((a, b) => a.updatedAt.localeCompare(b.updatedAt));
+  for (const pr of projects)
+    for (const x of pr.parties || []) {
+      const name = x.name.trim();
+      if (!name) continue;
+      const key = [...map.keys()].find((k) => k.toLowerCase() === name.toLowerCase()) || name;
+      if (x.logo || !map.has(key)) map.set(key, x.logo || map.get(key) || null);
+    }
+  return map;
+}
+
+$("#party-list").addEventListener("input", (e) => {
+  const row = e.target.closest(".party");
+  if (!row || !e.target.dataset.f) return;
+  state.current.parties[row.dataset.i][e.target.dataset.f] = e.target.value;
+  scheduleSave();
+  refreshCoverPreview();
+});
+$("#party-list").addEventListener("change", async (e) => {
+  const row = e.target.closest(".party");
+  if (!row) return;
+  const party = state.current.parties[row.dataset.i];
+  if (e.target.dataset.f === "name" && !party.logo) {
+    // reuse the logo from an earlier project with the same party name
+    const hit = [...knownParties()].find(([n, logo]) => logo && n.toLowerCase() === party.name.trim().toLowerCase());
+    if (hit) {
+      party.logo = hit[1];
+      renderParties();
+      toast("Logo filled in from an earlier project");
+    }
+  }
+  if (e.target.dataset.act === "logo" && e.target.files[0]) {
+    try {
+      party.logo = await imageToDataUrl(e.target.files[0]);
+    } catch (err) {
+      return toast(err.message, true);
+    }
+    renderParties();
+  }
+  await saveProject();
+  refreshCoverPreview(0);
+});
+$("#party-list").addEventListener("click", async (e) => {
+  const btn = e.target.closest("button[data-act]");
+  if (!btn) return;
+  const list = state.current.parties;
+  const i = +btn.closest(".party").dataset.i;
+  if (btn.dataset.act === "nologo") list[i].logo = null;
+  if (btn.dataset.act === "left") [list[i - 1], list[i]] = [list[i], list[i - 1]];
+  if (btn.dataset.act === "del") list.splice(i, 1);
+  renderParties();
+  await saveProject();
+  refreshCoverPreview(0);
+});
+$("#add-party").addEventListener("click", () => {
+  state.current.parties.push({ role: "", name: "", logo: null });
+  renderParties();
   scheduleSave();
 });
+
+// Logos are shrunk and stored as PNG data URLs inside the project, so duplicates and backups carry them.
+function imageToDataUrl(file, max = 600) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const k = Math.min(1, max / Math.max(img.width, img.height));
+      const c = document.createElement("canvas");
+      c.width = Math.round(img.width * k);
+      c.height = Math.round(img.height * k);
+      c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      resolve(c.toDataURL("image/png"));
+    };
+    img.onerror = () => reject(new Error(file.name + " is not a readable image"));
+    img.src = url;
+  });
+}
+
+/* ---- live cover preview ---- */
+let previewTimer, previewUrl;
+function refreshCoverPreview(delay = 700) {
+  clearTimeout(previewTimer);
+  previewTimer = setTimeout(async () => {
+    const p = state.current;
+    if (!p) return;
+    try {
+      const pdf = await PDFDocument.create();
+      const F = await loadFonts(pdf);
+      await drawCover(pdf, F, await embedLogo(pdf), p);
+      const bytes = await pdf.save();
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      previewUrl = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+      $("#cover-preview").src = previewUrl + "#toolbar=0&navpanes=0&view=Fit";
+    } catch (err) {
+      console.error(err);
+    }
+  }, delay);
+}
+$("#open-cover").addEventListener("click", () => previewUrl && window.open(previewUrl, "_blank"));
 $$(".options input").forEach((cb) =>
   cb.addEventListener("change", () => {
     state.current.options[cb.name] = cb.checked;
@@ -761,7 +911,105 @@ function drawHeader(page, F, logo, label) {
   }
 }
 
-function drawCover(pdf, F, logo, p) {
+async function drawCover(pdf, F, logo, p) {
+  migrateProject(p);
+  if (state.settings.coverStyle === "simple") return drawSimpleCover(pdf, F, logo, p);
+  return drawProjectCover(pdf, F, logo, p);
+}
+
+const BLUE = rgb(0, 0x70 / 255, 0xc0 / 255); // 0070C0, as in the Word cover template
+const DARK_BLUE = rgb(0, 0x20 / 255, 0x60 / 255); // 002060
+
+async function embedDataUrl(pdf, dataUrl) {
+  if (!dataUrl) return null;
+  try {
+    return dataUrl.startsWith("data:image/png") ? await pdf.embedPng(dataUrl) : await pdf.embedJpg(dataUrl);
+  } catch {
+    return null;
+  }
+}
+
+function centred(page, text, font, size, y, color, cx = A4[0] / 2) {
+  const t = safe(text);
+  const tw = font.widthOfTextAtSize(t, size);
+  page.drawText(t, { x: cx - tw / 2, y, size, font, color });
+  return tw;
+}
+
+// Lines of text, honouring line breaks typed by the user, wrapped to maxW
+const wrapLines = (text, font, size, maxW) => String(text || "").split(/\n/).flatMap((l) => (l.trim() ? wrap(l, font, size, maxW) : []));
+
+// Layout of MAIN COVER PAGE.docx: border, PROJECT title, underlined heading, parties with logos, submitted by.
+async function drawProjectCover(pdf, F, logo, p) {
+  const page = pdf.addPage(A4);
+  const [w, h] = A4;
+  page.drawRectangle({ x: 24, y: 24, width: w - 48, height: h - 48, borderColor: rgb(0, 0, 0), borderWidth: 0.6 });
+
+  // Title: "PROJECT: ..." shrinks to fit at most 8 lines
+  const raw = (p.coverTitle || p.name || "").trim().replace(/^project\s*:\s*/i, "");
+  const title = ("PROJECT: " + raw).toUpperCase();
+  const maxW = w - 144;
+  let size = 15, lines;
+  for (; size > 9; size -= 0.5) {
+    lines = wrapLines(title, F.bold, size, maxW);
+    if (lines.length <= 8) break;
+  }
+  let y = h - 95;
+  for (const l of lines) {
+    centred(page, l, F.bold, size, y, BLUE);
+    y -= size * 1.3;
+  }
+
+  // Heading, underlined
+  y -= 22;
+  for (const l of wrapLines((p.coverSubtitle || "").toUpperCase(), F.bold, 14, maxW)) {
+    const tw = centred(page, l, F.bold, 14, y, BLUE);
+    page.drawLine({ start: { x: (w - tw) / 2, y: y - 2.5 }, end: { x: (w + tw) / 2, y: y - 2.5 }, thickness: 0.9, color: BLUE });
+    y -= 20;
+  }
+  if (p.location) centred(page, p.location.toUpperCase(), F.bold, 10.5, y - 6, DARK_BLUE);
+
+  // Parties: one column each
+  const parties = (p.parties || []).filter((x) => x.role || x.name || x.logo).slice(0, MAX_PARTIES);
+  if (parties.length) {
+    const left = 48, colW = (w - 2 * left) / parties.length;
+    const logoW = Math.min(115, colW - 16), logoH = 82;
+    const roleY = 400;
+    for (const [i, x] of parties.entries()) {
+      const cx = left + colW * (i + 0.5);
+      wrapLines(x.role.toUpperCase(), F.bold, 10.5, colW - 10).slice(0, 2).forEach((l, j) => centred(page, l, F.bold, 10.5, roleY - j * 13, BLUE, cx));
+      const img = await embedDataUrl(pdf, x.logo);
+      if (img) {
+        const s = img.scaleToFit(logoW, logoH);
+        page.drawImage(img, { x: cx - s.width / 2, y: roleY - 30 - logoH + (logoH - s.height) / 2, width: s.width, height: s.height });
+      }
+      wrapLines(x.name.toUpperCase(), F.bold, 10, colW - 12).slice(0, 4).forEach((l, j) => centred(page, l, F.bold, 10, roleY - 30 - logoH - 20 - j * 12.5, BLUE, cx));
+    }
+  }
+
+  // Submitted by
+  let sy = 205;
+  centred(page, "SUBMITTED BY", F.bold, 11, sy, BLUE);
+  sy -= 12;
+  if (logo) {
+    const s = logo.scaleToFit(150, 72);
+    page.drawImage(logo, { x: (w - s.width) / 2, y: sy - s.height, width: s.width, height: s.height });
+    sy -= s.height + 18;
+  } else sy -= 18;
+  for (const l of wrapLines((state.settings.fullName || "").toUpperCase(), F.bold, 12, w - 120)) {
+    centred(page, l, F.bold, 12, sy, DARK_BLUE);
+    sy -= 15;
+  }
+
+  // Document control line, inside the border
+  const ctl = [p.refNo && "Doc. No.: " + p.refNo, p.submissionNo && "Submission No.: " + p.submissionNo, p.revision && "Rev.: " + p.revision, p.date && "Date: " + fmtDate(p.date)].filter(Boolean).join("     ");
+  if (ctl) {
+    page.drawLine({ start: { x: 48, y: 54 }, end: { x: w - 48, y: 54 }, thickness: 0.4, color: BLUE });
+    centred(page, fit(ctl, F.reg, 8.5, w - 100), F.reg, 8.5, 40, BLUE);
+  }
+}
+
+function drawSimpleCover(pdf, F, logo, p) {
   const page = pdf.addPage(A4);
   const [w, h] = A4;
   drawHeader(page, F, logo, "");
@@ -774,18 +1022,16 @@ function drawCover(pdf, F, logo, p) {
   }
   page.drawRectangle({ x: w / 2 - 60, y: y + 8, width: 120, height: 3, color: ACCENT });
   y -= 28;
-  for (const line of wrap(p.subject, F.reg, 14, w - 120)) {
+  for (const line of wrap(p.coverSubtitle, F.reg, 14, w - 120)) {
     const lw = F.reg.widthOfTextAtSize(line, 14);
     page.drawText(line, { x: (w - lw) / 2, y, size: 14, font: F.reg, color: GREY });
     y -= 19;
   }
   y -= 25;
   const rows = [
-    ["Project", p.name],
+    ["Project", p.coverTitle || p.name],
     ["Location", p.location],
-    ["Client", p.client],
-    ["Consultant / PMC", p.consultant],
-    ["Main contractor", p.contractor],
+    ...p.parties.filter((x) => x.name).map((x) => [x.role || "Party", x.name]),
     ["Submitted by", state.settings.fullName],
     ["Document / reference no.", p.refNo],
     ["Submission no.", p.submissionNo],
@@ -983,7 +1229,7 @@ async function generate() {
     const logo = await embedLogo(out);
     out.setTitle(safe(`${state.settings.title} - ${p.name}`));
     out.setAuthor(safe(state.settings.fullName));
-    out.setSubject(safe(p.subject));
+    out.setSubject(safe(p.coverTitle || p.name));
 
     // ---- plan the page layout first so the index can show page numbers ----
     const coverDocs = docsOf("cover");
@@ -1041,7 +1287,7 @@ async function generate() {
 
     // ---- build ----
     if (coverDocs.length) for (const d of coverDocs) await appendDoc(out, d, warnings);
-    else drawCover(out, F, logo, p);
+    else await drawCover(out, F, logo, p);
     if (o.optIndex) drawIndex(out, F, logo, p, entries);
     if (o.optSchedule) drawSchedule(out, F, logo, p);
     for (const g of groups) {
