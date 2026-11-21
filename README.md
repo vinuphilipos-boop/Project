@@ -42,6 +42,12 @@ python3 -m http.server 8000
 then visit http://localhost:8000. (Offline support and installing need `http://localhost` or HTTPS;
 opening `index.html` directly as a file still works but can't be installed.)
 
+## App scope
+
+The Eisenhower app's manifest `scope` is `./index.html`, not the whole site, so other apps in this
+repository (such as `tech-submission/`) can be installed separately. Its `id` stays `./`, so existing
+installs update in place instead of becoming a new app.
+
 ## Releasing updates
 
 When you change any app file, bump `CACHE_VERSION` in `sw.js` (e.g. `eisenhower-v2`) so installed
