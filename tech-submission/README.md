@@ -97,8 +97,10 @@ python3 -m http.server 8000   # from the repository root
 
 then open http://localhost:8000/tech-submission/.
 
-**Releasing updates:** when you change any app file, bump `CACHE_VERSION` in
-`tech-submission/sw.js` (e.g. `tech-submission-v2`) so installed copies pick up the new version.
+**Releasing updates:** when you change any app file, bump the version in all three places so
+browsers and installed copies load a matching set of files: `APP_VERSION` in `app.js`, `data-version`
+and the `?v=` on the `app.js` / `styles.css` links in `index.html`, and `CACHE_VERSION` in `sw.js`.
+The version is shown under **Company settings**.
 
 PDF merging uses [pdf-lib](https://pdf-lib.js.org/) (MIT), which is included in `vendor/`, so the
 app works without internet access.
