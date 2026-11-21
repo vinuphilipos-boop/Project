@@ -3,7 +3,7 @@
   "short_name": "Tech Submission",
   "description": "Build street lighting technical submissions for client approval from a reusable document library.",
   "id": "./",
-  "start_url": "./",
+  "start_url": "./?app=tech-submission",
   "scope": "./",
   "display": "standalone",
   "background_color": "#f4f6f8",
