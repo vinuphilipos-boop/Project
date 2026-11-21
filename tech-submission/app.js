@@ -127,19 +127,50 @@ function busy(on, text = "Working…") {
   $("#busy-text").textContent = text;
 }
 
+// Work out the file type from its first bytes. Browsers report types inconsistently
+// (e.g. "application/x-pdf", "application/octet-stream" or "image/pjpeg" on many Windows PCs).
+function sniffType(data, name = "") {
+  const b = new Uint8Array(data, 0, Math.min(1024, data.byteLength));
+  if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return "image/png";
+  if (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return "image/jpeg";
+  // "%PDF" may follow a few junk bytes at the start of the file
+  for (let i = 0; i < b.length - 4; i++) if (b[i] === 0x25 && b[i + 1] === 0x50 && b[i + 2] === 0x44 && b[i + 3] === 0x46) return "application/pdf";
+  const ext = name.toLowerCase().split(".").pop();
+  return { pdf: "application/pdf", png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg" }[ext] || "";
+}
+
+function unsupportedMessage(name) {
+  const ext = name.toLowerCase().split(".").pop();
+  if (["doc", "docx", "xls", "xlsx", "ppt", "pptx"].includes(ext)) return `${name}: Word, Excel and PowerPoint files can't be merged. Open it and use File → Save As → PDF, then upload the PDF.`;
+  if (["dwg", "dxf"].includes(ext)) return `${name}: drawings must be plotted / exported to PDF first, then uploaded.`;
+  return `${name}: not a PDF, PNG or JPG file. Save it as PDF first.`;
+}
+
+// pdf-lib is strict by default; retry leniently so slightly damaged PDFs (common from scanners
+// and some PDF tools) still load.
+async function loadPdf(data) {
+  try {
+    return await PDFDocument.load(data, { ignoreEncryption: true, updateMetadata: false });
+  } catch (first) {
+    try {
+      return await PDFDocument.load(data, { ignoreEncryption: true, updateMetadata: false, throwOnInvalidObject: false, capNumbers: true });
+    } catch {
+      throw first;
+    }
+  }
+}
+
 async function fileToDoc(file, scope, category, tags = [], notes = "") {
   const data = await file.arrayBuffer();
-  const mime = file.type || (file.name.toLowerCase().endsWith(".pdf") ? "application/pdf" : "");
-  if (!["application/pdf", "image/png", "image/jpeg"].includes(mime)) {
-    throw new Error(`${file.name}: only PDF, PNG and JPG files are supported. Save other formats as PDF first.`);
-  }
+  if (!data.byteLength) throw new Error(`${file.name}: the file is empty.`);
+  const mime = sniffType(data, file.name);
+  if (!mime) throw new Error(unsupportedMessage(file.name));
   let pages = 1;
   if (mime === "application/pdf") {
     try {
-      const pdf = await PDFDocument.load(data, { ignoreEncryption: true, updateMetadata: false });
-      pages = pdf.getPageCount();
+      pages = (await loadPdf(data)).getPageCount();
     } catch (e) {
-      throw new Error(`${file.name}: could not be read as a PDF (${e.message}).`);
+      throw new Error(`${file.name}: this PDF could not be read (${e.message}). Open it and print / save it again as PDF, then upload the new copy.`);
     }
   }
   const meta = {
@@ -211,7 +242,12 @@ $("#settings-form").addEventListener("submit", async (e) => {
   const f = e.target;
   for (const k of ["shortName", "fullName", "address", "title", "preparedBy", "coverStyle"]) state.settings[k] = f.elements[k].value.trim();
   const logo = f.elements.logo.files[0];
-  if (logo) state.settings.logo = { data: await logo.arrayBuffer(), mime: logo.type };
+  if (logo) {
+    const data = await logo.arrayBuffer();
+    const mime = sniffType(data, logo.name);
+    if (!mime.startsWith("image/")) return toast(`${logo.name}: the logo must be a PNG or JPG image.`, true);
+    state.settings.logo = { data, mime };
+  }
   await DB.put("settings", state.settings);
   renderSettings();
   fillCategorySelects();
@@ -257,7 +293,7 @@ function renderLibrary() {
         <td>${d.pages}</td>
         <td>${usageCount(d.id)} project(s)</td>
         <td class="actions"><button type="button" class="icon" data-act="view" title="Open">View</button>
-        <label class="button-like icon" title="Replace with a newer revision of the file">Replace<input type="file" data-act="replace" accept="application/pdf,image/png,image/jpeg" hidden /></label>
+        <label class="button-like icon" title="Replace with a newer revision of the file">Replace<input type="file" data-act="replace" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg" hidden /></label>
         <button type="button" class="icon danger" data-act="delete" title="Delete">Delete</button></td></tr>`
     )
     .join("")}</tbody></table>`;
@@ -324,26 +360,66 @@ async function deleteDoc(id) {
   }
 }
 
-$("#lib-upload").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const f = e.target;
-  const files = [...f.elements.files.files];
+async function uploadToLibrary(files) {
+  const f = $("#lib-upload");
+  if (!files.length) return toast("Choose one or more files first.", true);
   const errors = [];
-  busy(true, "Uploading…");
-  for (const file of files) {
-    try {
-      await fileToDoc(file, "library", f.elements.category.value, parseTags(f.elements.tags.value), f.elements.notes.value.trim());
-    } catch (err) {
-      errors.push(err.message);
+  let added = 0;
+  try {
+    for (const [i, file] of files.entries()) {
+      busy(true, `Uploading ${i + 1} of ${files.length}: ${file.name}`);
+      try {
+        await fileToDoc(file, "library", f.elements.category.value, parseTags(f.elements.tags.value), f.elements.notes.value.trim());
+        added++;
+      } catch (err) {
+        errors.push(storageMessage(err, file.name));
+      }
     }
+  } finally {
+    busy(false);
+    f.elements.files.value = "";
+    $("#lib-filter-cat").value = "";
+    renderLibrary();
   }
-  busy(false);
-  f.elements.files.value = "";
-  $("#lib-filter-cat").value = "";
-  renderLibrary();
-  if (errors.length) toast(errors.join("\n"), true);
-  else toast(`${files.length} document(s) added to the library`);
+  if (errors.length) showUploadErrors(added, errors);
+  else toast(`${added} document(s) added to the library`);
+}
+
+// Turn browser storage failures into something actionable.
+function storageMessage(err, name) {
+  const n = err && err.name;
+  if (n === "QuotaExceededError") return `${name}: the browser has run out of storage space for this site. Free disk space, or remove unused documents from the library.`;
+  if (n === "InvalidStateError" || n === "UnknownError" || n === "SecurityError") return `${name}: the browser is not allowing this site to save files (private / incognito window, or storage blocked in settings). Use a normal window.`;
+  return err && err.message ? err.message : `${name}: upload failed (${err}).`;
+}
+
+function showUploadErrors(added, errors) {
+  $("#upload-errors-summary").textContent =
+    (added ? `${added} file(s) were added. ` : "") + `${errors.length} file(s) could not be added:`;
+  $("#upload-errors-list").innerHTML = errors.map((m) => `<li>${esc(m)}</li>`).join("");
+  $("#upload-errors").showModal();
+}
+
+$("#lib-upload").addEventListener("submit", (e) => {
+  e.preventDefault();
+  uploadToLibrary([...e.target.elements.files.files]);
 });
+
+// Drag and drop files onto the upload panel
+const dropZone = $("#lib-drop");
+["dragenter", "dragover"].forEach((t) =>
+  dropZone.addEventListener(t, (e) => {
+    e.preventDefault();
+    dropZone.classList.add("dragging");
+  })
+);
+["dragleave", "drop"].forEach((t) => dropZone.addEventListener(t, () => dropZone.classList.remove("dragging")));
+dropZone.addEventListener("drop", (e) => {
+  e.preventDefault();
+  uploadToLibrary([...e.dataTransfer.files]);
+});
+// Don't let a file dropped elsewhere on the page replace the app with that file.
+["dragover", "drop"].forEach((t) => window.addEventListener(t, (e) => e.preventDefault()));
 
 /* ------------------------------------------------------------------ */
 /* Projects                                                            */
@@ -508,7 +584,7 @@ function renderParties() {
         <input data-f="name" list="party-names" value="${esc(x.name)}" placeholder="Name, e.g. NATIONAL HIGHWAYS AUTHORITY OF INDIA" />
         <div class="party-logo">${x.logo ? `<img src="${x.logo}" alt="" />` : "No logo"}</div>
         <div class="party-actions">
-          <label class="button-like small">Logo<input type="file" data-act="logo" accept="image/png,image/jpeg" hidden /></label>
+          <label class="button-like small">Logo<input type="file" data-act="logo" accept=".png,.jpg,.jpeg,image/png,image/jpeg" hidden /></label>
           ${x.logo ? `<button type="button" class="icon" data-act="nologo" title="Remove logo">No logo</button>` : ""}
           <button type="button" class="icon" data-act="left" ${i === 0 ? "disabled" : ""} title="Move left">↑</button>
           <button type="button" class="icon danger" data-act="del" title="Remove party">✕</button>
@@ -603,7 +679,10 @@ function imageToDataUrl(file, max = 600) {
 
 /* ---- live cover preview ---- */
 let previewTimer, previewUrl;
+const inlinePdf = () => navigator.pdfViewerEnabled === true && matchMedia("(min-width: 901px)").matches;
+
 function refreshCoverPreview(delay = 700) {
+  $("#cover-preview").hidden = !inlinePdf();
   clearTimeout(previewTimer);
   previewTimer = setTimeout(async () => {
     const p = state.current;
@@ -615,7 +694,9 @@ function refreshCoverPreview(delay = 700) {
       const bytes = await pdf.save();
       if (previewUrl) URL.revokeObjectURL(previewUrl);
       previewUrl = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
-      $("#cover-preview").src = previewUrl + "#toolbar=0&navpanes=0&view=Fit";
+      // Only show it inline where the browser can display PDFs; elsewhere (most phones, or Chrome set to
+      // "download PDFs") loading it in the frame would download the cover every time it refreshes.
+      if (inlinePdf()) $("#cover-preview").src = previewUrl + "#toolbar=0&navpanes=0&view=Fit";
     } catch (err) {
       console.error(err);
     }
@@ -722,7 +803,7 @@ function sectionHtml(s, isSub) {
       ${!isCover ? `<span class="badge">${ids.length} doc(s), ${pages} page(s)</span>` : ""}
       ${sugg.length ? `<span class="badge sugg" title="${esc(sugg.map((d) => d.name).join(", "))}">${sugg.length} matching in library</span>` : ""}
       ${!isCover ? `<button type="button" class="small" data-act="pick">Select from library</button>` : ""}
-      <label class="button-like small">Upload ${isCover ? "custom cover" : "for this project"}<input type="file" data-act="upload" accept="application/pdf,image/png,image/jpeg" multiple hidden /></label>
+      <label class="button-like small">Upload ${isCover ? "custom cover" : "for this project"}<input type="file" data-act="upload" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg" multiple hidden /></label>
     </div>
     <div class="section-body">${
       ids.length ? ids.map((id, i) => docRowHtml(docById(id), i, ids.length)).join("") : isCover ? "" : `<div class="section-empty">Nothing selected — this section will be left out.</div>`
@@ -749,13 +830,14 @@ $("#section-list").addEventListener("change", async (e) => {
       const d = await fileToDoc(file, state.current.id, key);
       state.current.sections[key].push(d.id);
     } catch (err) {
-      errors.push(err.message);
+      errors.push(storageMessage(err, file.name));
     }
   }
   busy(false);
+  e.target.value = "";
   await saveProject();
   renderSections();
-  if (errors.length) toast(errors.join("\n"), true);
+  if (errors.length) showUploadErrors(0, errors);
 });
 
 $("#section-list").addEventListener("click", async (e) => {
@@ -1173,7 +1255,7 @@ async function appendDoc(out, meta, warnings) {
     return 0;
   }
   if (meta.mime === "application/pdf") {
-    const src = await PDFDocument.load(f.data, { ignoreEncryption: true });
+    const src = await loadPdf(f.data);
     if (src.isEncrypted) warnings.push(`${meta.name} is password-protected; its pages may appear blank. Upload an unprotected copy.`);
     const pages = await out.copyPages(src, src.getPageIndices());
     pages.forEach((pg) => out.addPage(pg));
@@ -1407,21 +1489,75 @@ load()
 /* ------------------------------------------------------------------ */
 /* Installable app                                                     */
 /* ------------------------------------------------------------------ */
-// Chrome / Edge / Android show the Install button; iPhone and iPad use Share → Add to Home Screen.
+// The button is always shown (except inside the installed app). Chrome / Edge / Android give us an
+// install prompt; everywhere else, clicking it explains how to install in that browser.
+const PUBLIC_URL = "https://vinuphilipos-boop.github.io/Project/tech-submission/";
 let installPrompt = null;
+const isInstalled = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+$("#install-btn").hidden = isInstalled();
+
 window.addEventListener("beforeinstallprompt", (e) => {
   e.preventDefault();
   installPrompt = e;
-  $("#install-btn").hidden = false;
 });
-$("#install-btn").addEventListener("click", async () => {
-  if (!installPrompt) return;
-  installPrompt.prompt();
-  await installPrompt.userChoice;
+window.addEventListener("appinstalled", () => {
   installPrompt = null;
   $("#install-btn").hidden = true;
+  toast("Installed. Open it from your Start menu, Dock or home screen.");
 });
-window.addEventListener("appinstalled", () => ($("#install-btn").hidden = true));
+
+function installHelp() {
+  const ua = navigator.userAgent;
+  const ios = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+  const edge = /Edg\//.test(ua);
+  const chrome = /Chrome\//.test(ua) && !edge && !/OPR\//.test(ua);
+  const android = /Android/.test(ua);
+  const firefox = /Firefox\//.test(ua);
+  const safari = /Safari\//.test(ua) && !/Chrome|CriOS|FxiOS|EdgiOS/.test(ua);
+  const link = `<p><a href="${PUBLIC_URL}" target="_blank" rel="noopener">${PUBLIC_URL}</a></p>`;
+
+  if (location.protocol === "file:") {
+    return `<p>This copy was opened from a file on your computer, and browsers can only install apps from a web link.</p>
+      <p>Open the web link in Chrome or Edge, then click <b>Install app</b> there:</p>${link}
+      <p class="hint">The installed app keeps its own data. To bring your projects and library over, use
+      <b>Company settings → Export backup</b> here, then <b>Import backup</b> in the installed app.</p>`;
+  }
+  if (ios) {
+    return `<p>On iPhone and iPad, open this page in <b>Safari</b>, then:</p>
+      <ol><li>Tap the <b>Share</b> button (square with an arrow).</li><li>Tap <b>Add to Home Screen</b>, then <b>Add</b>.</li></ol>`;
+  }
+  if (android) {
+    return `<p>In <b>Chrome</b>, tap the menu <b>⋮</b> (top right), then <b>Install app</b> or <b>Add to Home screen</b>.</p>`;
+  }
+  if (edge) {
+    return `<p>In <b>Edge</b>, click the menu <b>…</b> (top right) → <b>Apps</b> → <b>Install this site as an app</b>.
+      You may also see an install icon at the right end of the address bar.</p>`;
+  }
+  if (chrome) {
+    return `<p>In <b>Chrome</b>, click the install icon at the right end of the address bar (a monitor with a down arrow), or
+      the menu <b>⋮</b> → <b>Cast, save and share</b> → <b>Install page as app</b>.</p>
+      <p class="hint">If neither is there, reload the page once and wait a few seconds; Chrome only offers installation after the
+      page has fully loaded over HTTPS.</p>`;
+  }
+  if (safari) {
+    return `<p>In <b>Safari</b> on Mac: <b>File</b> → <b>Add to Dock</b> (macOS Sonoma or later).</p>`;
+  }
+  if (firefox) {
+    return `<p>Firefox on computers can't install web apps. Open this link in <b>Chrome</b> or <b>Edge</b> and click <b>Install app</b>:</p>${link}`;
+  }
+  return `<p>Open this link in <b>Chrome</b> or <b>Edge</b> and click <b>Install app</b>:</p>${link}`;
+}
+
+$("#install-btn").addEventListener("click", async () => {
+  if (installPrompt) {
+    installPrompt.prompt();
+    await installPrompt.userChoice;
+    installPrompt = null;
+    return;
+  }
+  $("#install-help-body").innerHTML = installHelp();
+  $("#install-help").showModal();
+});
 
 // Ask the browser to keep stored documents even when disk space runs low.
 if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});

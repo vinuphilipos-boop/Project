@@ -20,7 +20,7 @@
       <h1>Technical Submission Builder</h1>
       <p class="subtitle">Street lighting submissions for client approval: pick documents, fill project data, generate one PDF.</p>
     </div>
-    <button type="button" id="install-btn" class="install-btn" hidden>Install app</button>
+    <button type="button" id="install-btn" class="install-btn">⤓ Install app</button>
     </div>
     <nav class="tabs" role="tablist">
       <button type="button" class="tab" data-view="projects" aria-selected="true">Projects</button>
@@ -124,11 +124,11 @@
     <!-- ================= LIBRARY ================= -->
     <section id="view-library" class="view" hidden>
       <div class="toolbar"><h2>Standard document library</h2></div>
-      <div class="panel">
-        <h3>Upload standard documents</h3>
+      <div class="panel drop-zone" id="lib-drop">
+        <h3>Upload standard documents <span class="muted">(or drag and drop files here)</span></h3>
         <p class="hint">Upload once, reuse in every project. PDF, JPG and PNG are supported (save Word/DWG files as PDF first).</p>
         <form id="lib-upload" class="grid-form" autocomplete="off">
-          <label class="wide">Files<input type="file" name="files" accept="application/pdf,image/png,image/jpeg" multiple required /></label>
+          <label class="wide">Files<input type="file" name="files" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg" multiple required /></label>
           <label>Section<select name="category"></select></label>
           <label>Tags <span class="muted">(make, model, wattage… comma separated)</span><input name="tags" placeholder="e.g. 90W, ABC-Street, Philips" /></label>
           <label class="wide">Notes<input name="notes" placeholder="optional" /></label>
@@ -159,7 +159,7 @@
             <option value="project">Project cover (title, parties with logos, submitted by)</option>
             <option value="simple">Simple cover (details table and client approval box)</option>
           </select></label>
-          <label>Company logo (PNG / JPG) <span class="muted">(shown under "Submitted by")</span><input type="file" name="logo" accept="image/png,image/jpeg" /></label>
+          <label>Company logo (PNG / JPG) <span class="muted">(shown under "Submitted by")</span><input type="file" name="logo" accept=".png,.jpg,.jpeg,image/png,image/jpeg" /></label>
           <div id="logo-preview" class="logo-preview"></div>
           <div class="wide"><button type="submit" class="primary">Save settings</button></div>
         </form>
@@ -186,6 +186,25 @@
         <button value="cancel">Cancel</button>
         <button value="ok" class="primary" id="picker-ok">Add selected</button>
       </div>
+    </form>
+  </dialog>
+
+  <!-- Files that could not be uploaded -->
+  <dialog id="upload-errors">
+    <form method="dialog" class="dialog-body">
+      <h3>Some files were not uploaded</h3>
+      <p id="upload-errors-summary"></p>
+      <ul id="upload-errors-list" class="error-list"></ul>
+      <div class="dialog-actions"><button value="close" class="primary">OK</button></div>
+    </form>
+  </dialog>
+
+  <!-- How to install, when the browser has no install prompt to offer -->
+  <dialog id="install-help">
+    <form method="dialog" class="dialog-body">
+      <h3>Install Technical Submission Builder</h3>
+      <div id="install-help-body"></div>
+      <div class="dialog-actions"><button value="close" class="primary">OK</button></div>
     </form>
   </dialog>
 
