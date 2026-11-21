@@ -1,5 +1,5 @@
 // Bump CACHE_VERSION whenever app files change so installed apps update.
-const CACHE_VERSION = "tech-submission-v4";
+const CACHE_VERSION = "tech-submission-v5";
 const ASSETS = [
   "./",
   "index.html",
@@ -14,7 +14,8 @@ const ASSETS = [
 ];
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(CACHE_VERSION).then((c) => c.addAll(ASSETS)));
+  // cache: "reload" bypasses the browser's HTTP cache, so the offline copy is the new release
+  event.waitUntil(caches.open(CACHE_VERSION).then((c) => c.addAll(ASSETS.map((u) => new Request(u, { cache: "reload" })))));
   self.skipWaiting();
 });
 
@@ -33,7 +34,9 @@ self.addEventListener("fetch", (event) => {
   const req = event.request;
   if (req.method !== "GET" || !req.url.startsWith(self.registration.scope)) return;
   event.respondWith(
-    fetch(req)
+    // "no-cache": always check with the server (cheap: unchanged files answer 304), so the page and its
+    // scripts never come from different releases. GitHub Pages lets browsers reuse files for 10 minutes otherwise.
+    fetch(req, { cache: "no-cache" })
       .then((res) => {
         if (res.ok) {
           const copy = res.clone();

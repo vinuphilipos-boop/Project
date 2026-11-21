@@ -153,3 +153,4 @@ h4 { margin: 1rem 0 .4rem; font-size: .92rem; }
 .cover-preview iframe[hidden] { display: none; }
 .upload-row { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
 button.big { font-size: 1rem; padding: .65rem 1.2rem; }
+.error-text { white-space: pre-wrap; word-break: break-word; max-height: 40vh; overflow: auto; background: #fdf2f2; color: var(--danger); padding: .6rem .8rem; border-radius: 6px; font-size: .8rem; }

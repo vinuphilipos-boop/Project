@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-version="5">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -12,7 +12,7 @@
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="icons/icon-180.png" />
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="styles.css?v=5" />
 </head>
 <body>
   <header class="topbar">
@@ -168,6 +168,7 @@
         </form>
       </div>
       <div class="panel">
+        <p class="muted" id="app-version"></p>
         <h3>Backup</h3>
         <p class="hint">Everything is stored in this browser only. Export a backup file regularly, and import it on another computer to move your library and projects.</p>
         <button type="button" id="export-all">Export backup</button>
@@ -189,6 +190,16 @@
         <button value="cancel">Cancel</button>
         <button value="ok" class="primary" id="picker-ok">Add selected</button>
       </div>
+    </form>
+  </dialog>
+
+  <!-- Unexpected errors, shown so they can be reported -->
+  <dialog id="app-error">
+    <form method="dialog" class="dialog-body">
+      <h3>Something went wrong</h3>
+      <p>Please take a screenshot of this message and send it to whoever maintains the app.</p>
+      <pre id="app-error-text" class="error-text"></pre>
+      <div class="dialog-actions"><button value="reload" id="app-error-reload">Reload the app</button><button value="close" class="primary">OK</button></div>
     </form>
   </dialog>
 
@@ -215,6 +226,6 @@
   <div id="toast" class="toast" hidden></div>
 
   <script src="vendor/pdf-lib.min.js"></script>
-  <script src="app.js"></script>
+  <script src="app.js?v=5"></script>
 </body>
 </html>

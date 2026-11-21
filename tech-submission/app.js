@@ -4,6 +4,32 @@
  */
 "use strict";
 
+// Must match data-version in index.html and the ?v= on its script / style links.
+const APP_VERSION = "5";
+
+/* ---- Visible error report ------------------------------------------- */
+// Unexpected errors are shown in a dialog (with the version and browser) so they can be screenshotted.
+function showAppError(err) {
+  const msg = (err && (err.stack || err.message)) || String(err);
+  const el = document.getElementById("app-error");
+  if (!el) return;
+  document.getElementById("app-error-text").textContent =
+    `${msg}\n\nApp version ${APP_VERSION} · ${navigator.userAgent}`;
+  if (!el.open) el.showModal();
+}
+window.addEventListener("error", (e) => showAppError(e.error || e.message));
+window.addEventListener("unhandledrejection", (e) => showAppError(e.reason));
+document.getElementById("app-error").addEventListener("close", (e) => {
+  if (e.target.returnValue === "reload") location.reload();
+});
+
+// If the page and this script come from different releases (a browser can briefly mix cached files right
+// after an update), reload once to get a matching set.
+if (document.documentElement.dataset.version !== APP_VERSION && !sessionStorage.getItem("ts-reloaded-for-" + APP_VERSION)) {
+  sessionStorage.setItem("ts-reloaded-for-" + APP_VERSION, "1");
+  location.reload();
+}
+
 const { PDFDocument, StandardFonts, rgb, degrees } = PDFLib;
 
 /* ------------------------------------------------------------------ */
@@ -226,6 +252,7 @@ $$(".tab").forEach((t) =>
 /* Settings                                                            */
 /* ------------------------------------------------------------------ */
 function renderSettings() {
+  $("#app-version").textContent = `App version ${APP_VERSION}`;
   const f = $("#settings-form");
   for (const k of ["shortName", "fullName", "address", "title", "preparedBy", "coverStyle"]) f.elements[k].value = state.settings[k] || "";
   f.elements.logo.value = "";
