@@ -1524,6 +1524,10 @@ function installHelp() {
   const android = /Android/.test(ua);
   const firefox = /Firefox\//.test(ua);
   const safari = /Safari\//.test(ua) && !/Chrome|CriOS|FxiOS|EdgiOS/.test(ua);
+  const otherAppNote = `<p class="hint">If the browser offers <b>Open in Eisenhower Box</b> instead of installing, that app was
+      installed before it was limited to its own page. Open <b>Eisenhower Box</b> once and close it (the browser then picks up
+      the change), or remove it from <code>chrome://apps</code> / <code>edge://apps</code> and install it again. When removing it,
+      leave <b>"Also clear data"</b> unticked: it would delete this app's projects and library too.</p>`;
   const link = `<p><a href="${PUBLIC_URL}" target="_blank" rel="noopener">${PUBLIC_URL}</a></p>`;
 
   if (inAppWindow() && !isInstalled()) {
@@ -1546,13 +1550,13 @@ function installHelp() {
   }
   if (edge) {
     return `<p>In <b>Edge</b>, click the menu <b>…</b> (top right) → <b>Apps</b> → <b>Install this site as an app</b>.
-      You may also see an install icon at the right end of the address bar.</p>`;
+      You may also see an install icon at the right end of the address bar.</p>${otherAppNote}`;
   }
   if (chrome) {
     return `<p>In <b>Chrome</b>, click the install icon at the right end of the address bar (a monitor with a down arrow), or
       the menu <b>⋮</b> → <b>Cast, save and share</b> → <b>Install page as app</b>.</p>
       <p class="hint">If neither is there, reload the page once and wait a few seconds; Chrome only offers installation after the
-      page has fully loaded over HTTPS.</p>`;
+      page has fully loaded over HTTPS.</p>${otherAppNote}`;
   }
   if (safari) {
     return `<p>In <b>Safari</b> on Mac: <b>File</b> → <b>Add to Dock</b> (macOS Sonoma or later).</p>`;

@@ -1,5 +1,5 @@
 // Bump CACHE_VERSION whenever app files change so installed apps update.
-const CACHE_VERSION = "eisenhower-v1";
+const CACHE_VERSION = "eisenhower-v2";
 const ASSETS = [
   "./",
   "index.html",
