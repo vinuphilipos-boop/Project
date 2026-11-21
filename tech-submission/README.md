@@ -28,9 +28,10 @@ need, and get one PDF with numbered pages.
 ## How to use
 
 1. **Company settings**: enter the company name, logo and submission title.
-2. **Document library**: upload standard PDFs, JPGs or PNGs and give each one a section and tags
-   (e.g. `90W, ABC-90`). If a data sheet gets a new revision, use **Replace**, and every project that
-   uses it picks up the new file.
+2. **Document library**: pick the section and tags (e.g. `90W, ABC-90`), then click
+   **Choose files and upload…** and select one or more PDFs, JPGs or PNGs. They are added as soon as you
+   pick them, or you can drag files onto the upload box. If a data sheet gets a new revision, use
+   **Replace**, and every project that uses it picks up the new file.
 3. **Projects → + New project** (or **Duplicate** a previous one):
    - fill in the project details (short name, location, reference no., submission no., revision, date)
    - fill in the **cover page**: the full project title (printed after "PROJECT:"), the heading
@@ -74,6 +75,8 @@ GitHub Pages must be switched on for the repository (Settings → Pages → *Dep
 
 Install it to get its own icon and window. It works offline after the first visit:
 
+- If you also installed **Eisenhower Box** from this site, its app window can open this page too
+  (the title bar then says "Eisenhower Box"). Install this app from a normal browser tab instead.
 - **Windows / Mac (Chrome or Edge):** click **Install app** at the top right of the page, or the
   install icon in the address bar. If the browser isn't ready to install yet, the button explains the
   menu steps for that browser.

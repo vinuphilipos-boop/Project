@@ -128,11 +128,14 @@
         <h3>Upload standard documents <span class="muted">(or drag and drop files here)</span></h3>
         <p class="hint">Upload once, reuse in every project. PDF, JPG and PNG are supported (save Word/DWG files as PDF first).</p>
         <form id="lib-upload" class="grid-form" autocomplete="off">
-          <label class="wide">Files<input type="file" name="files" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg" multiple required /></label>
-          <label>Section<select name="category"></select></label>
-          <label>Tags <span class="muted">(make, model, wattage… comma separated)</span><input name="tags" placeholder="e.g. 90W, ABC-Street, Philips" /></label>
-          <label class="wide">Notes<input name="notes" placeholder="optional" /></label>
-          <div class="wide"><button type="submit" class="primary">Upload to library</button></div>
+          <label>1. Section<select name="category"></select></label>
+          <label>2. Tags <span class="muted">(optional: make, model, wattage… comma separated)</span><input name="tags" placeholder="e.g. 90W, ABC-Street, Philips" /></label>
+          <label class="wide">Notes <span class="muted">(optional)</span><input name="notes" /></label>
+          <div class="wide upload-row">
+            <button type="submit" class="primary big" id="lib-choose">3. Choose files and upload…</button>
+            <span class="muted">They are added as soon as you pick them. You can pick several at once, or drag files onto this box.</span>
+            <input type="file" name="files" id="lib-files" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg" multiple hidden />
+          </div>
         </form>
       </div>
       <div class="panel">

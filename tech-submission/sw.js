@@ -1,5 +1,5 @@
 // Bump CACHE_VERSION whenever app files change so installed apps update.
-const CACHE_VERSION = "tech-submission-v2";
+const CACHE_VERSION = "tech-submission-v3";
 const ASSETS = [
   "./",
   "index.html",

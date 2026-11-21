@@ -151,3 +151,5 @@ h4 { margin: 1rem 0 .4rem; font-size: .92rem; }
 .error-list { margin: .5rem 0; padding-left: 1.2rem; color: var(--danger); font-size: .9rem; line-height: 1.45; }
 .error-list li { margin-bottom: .4rem; }
 .cover-preview iframe[hidden] { display: none; }
+.upload-row { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+button.big { font-size: 1rem; padding: .65rem 1.2rem; }

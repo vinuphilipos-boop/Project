@@ -400,9 +400,14 @@ function showUploadErrors(added, errors) {
   $("#upload-errors").showModal();
 }
 
+// One step: the button opens the file picker and the chosen files are uploaded straight away.
 $("#lib-upload").addEventListener("submit", (e) => {
   e.preventDefault();
-  uploadToLibrary([...e.target.elements.files.files]);
+  $("#lib-files").click();
+});
+$("#lib-files").addEventListener("change", (e) => {
+  const files = [...e.target.files];
+  if (files.length) uploadToLibrary(files);
 });
 
 // Drag and drop files onto the upload panel
@@ -1493,7 +1498,12 @@ load()
 // install prompt; everywhere else, clicking it explains how to install in that browser.
 const PUBLIC_URL = "https://vinuphilipos-boop.github.io/Project/tech-submission/";
 let installPrompt = null;
-const isInstalled = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+// The installed app starts at "./?app=tech-submission" (see manifest.webmanifest). An app window that did
+// not start there belongs to another app on this site (e.g. Eisenhower Box, whose scope covers the whole
+// site), so this app is not installed in it.
+const inAppWindow = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+if (new URLSearchParams(location.search).get("app") === "tech-submission") sessionStorage.setItem("ts-own-window", "1");
+const isInstalled = () => inAppWindow() && sessionStorage.getItem("ts-own-window") === "1";
 $("#install-btn").hidden = isInstalled();
 
 window.addEventListener("beforeinstallprompt", (e) => {
@@ -1516,6 +1526,11 @@ function installHelp() {
   const safari = /Safari\//.test(ua) && !/Chrome|CriOS|FxiOS|EdgiOS/.test(ua);
   const link = `<p><a href="${PUBLIC_URL}" target="_blank" rel="noopener">${PUBLIC_URL}</a></p>`;
 
+  if (inAppWindow() && !isInstalled()) {
+    return `<p>You are using this page inside another installed app's window (for example <b>Eisenhower Box</b>), so it can't be installed from here.</p>
+      <p>Copy this link, open it in a normal <b>Chrome</b> or <b>Edge</b> tab, and click <b>Install app</b> there:</p>${link}
+      <p class="hint">Your projects and library are shared between that tab and this window, because they are on the same site.</p>`;
+  }
   if (location.protocol === "file:") {
     return `<p>This copy was opened from a file on your computer, and browsers can only install apps from a web link.</p>
       <p>Open the web link in Chrome or Edge, then click <b>Install app</b> there:</p>${link}
