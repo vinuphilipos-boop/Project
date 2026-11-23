@@ -1,6 +1,9 @@
 > **Also in this repository:** [Technical Submission Builder](tech-submission/README.md), which builds
 > street lighting technical submissions for client approval. It is installable and is published at
 > https://vinuphilipos-boop.github.io/Project/tech-submission/
+>
+> And the [PO Tracker](po-tracker/README.md), a daily scorecard for the sales team's Performance
+> Obligations, published at https://vinuphilipos-boop.github.io/Project/po-tracker/
 
 # Eisenhower Box
 

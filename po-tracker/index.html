@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="description" content="Daily Performance Obligation scorecard for the sales team." />
+  <meta name="theme-color" content="#14365f" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="PO Tracker" />
+  <title>PO Tracker</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="icons/icon-180.png" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="top">
+    <div>
+      <h1>PO Tracker</h1>
+      <p class="subtitle">Reach · Convert · Retain — one team, one number</p>
+    </div>
+    <div class="top-right">
+      <label class="date-pick">Date <input id="as-of" type="date" /></label>
+      <button id="install-btn" type="button" hidden>Install app</button>
+    </div>
+  </header>
+
+  <nav id="tabs">
+    <a href="#dashboard">Scorecard</a>
+    <a href="#daily">Huddle &amp; Close</a>
+    <a href="#pipeline">Pipeline</a>
+    <a href="#orders">Orders</a>
+    <a href="#dues">Collections</a>
+    <a href="#subs">Offers</a>
+    <a href="#review">Saturday review</a>
+    <a href="#ethics">Work ethic</a>
+    <a href="#settings">Settings</a>
+  </nav>
+
+  <main id="view"></main>
+
+  <div id="toast" role="status" aria-live="polite" hidden></div>
+  <script src="app.js"></script>
+</body>
+</html>
