@@ -775,7 +775,22 @@
   render();
 
   let deferred;
-  window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); deferred = e; $("#install-btn").hidden = false; });
-  $("#install-btn").onclick = async () => { if (!deferred) return; deferred.prompt(); await deferred.userChoice; deferred = null; $("#install-btn").hidden = true; };
+  // Install: use the browser prompt when offered, otherwise show the manual steps for this device.
+  const standalone = matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+  if (!standalone) $("#install-btn").hidden = false;
+  window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); deferred = e; });
+  window.addEventListener("appinstalled", () => { $("#install-btn").hidden = true; $("#install-help").hidden = true; toast("Installed"); });
+  $("#install-btn").onclick = async () => {
+    if (deferred) { deferred.prompt(); const r = await deferred.userChoice; deferred = null; if (r.outcome === "accepted") $("#install-btn").hidden = true; return; }
+    const ua = navigator.userAgent; const ios = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    const android = /Android/.test(ua); const inApp = /FBAN|FBAV|Instagram|WhatsApp|Line\//.test(ua);
+    let steps;
+    if (inApp) steps = "<li>This page is open inside another app (e.g. WhatsApp). Tap ⋮ or the share icon and choose <b>Open in Chrome</b> (Android) or <b>Open in Safari</b> (iPhone), then tap Install app again.</li>";
+    else if (ios) steps = "<li>Open this page in <b>Safari</b> (or Chrome on iPhone).</li><li>Tap the <b>Share</b> button (square with an arrow).</li><li>Scroll down and tap <b>Add to Home Screen</b>, then <b>Add</b>.</li>";
+    else if (android) steps = "<li>Open this page in <b>Chrome</b>.</li><li>Tap the <b>⋮</b> menu at the top right.</li><li>Tap <b>Install app</b> or <b>Add to Home screen</b>, then <b>Install</b>.</li><li>If neither appears, reload the page once and try again.</li>";
+    else steps = "<li>Use <b>Chrome</b> or <b>Edge</b>.</li><li>Click the install icon at the right end of the address bar, or open the <b>⋮ / …</b> menu → <b>Cast, save and share → Install page as app</b> (Chrome) or <b>Apps → Install this site as an app</b> (Edge).</li><li>If it isn't offered, reload the page once and try again.</li>";
+    $("#install-help").innerHTML = `<div class="row"><b>Install PO Tracker</b><span class="spacer"></span><button type="button" class="small secondary" id="ih-close">Close</button></div><ol>${steps}</ol>`;
+    $("#install-help").hidden = false; $("#ih-close").onclick = () => ($("#install-help").hidden = true);
+  };
   if ("serviceWorker" in navigator && location.protocol.startsWith("http")) navigator.serviceWorker.register("sw.js");
 })();
