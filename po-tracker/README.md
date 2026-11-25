@@ -21,19 +21,39 @@ The tracker covers **Q3 (Oct–Dec 2026) and Q4 (Jan–Mar 2027)** of FY 2026-27
 The Q3/Q4 split starts equal; type your own figures in **Settings**. Enter **Q3 booked before tracker** (orders
 from 1 Oct to the day before the tracker start date) so Q3 progress is right. Any Q3 shortfall rolls into Q4.
 
+## The LT philosophy: Reach → Convert → Retain
+
+**Reach – Master Plan.** Each owner picks high-potential customers (consultants, architects, contractors,
+developers, Govt/PSU…) from their SOM (Serviceable Obtainable Market) and moves them through five stages:
+
+| Stage | Meaning |
+|---|---|
+| Sprouting | Does not know LT yet |
+| Seeding | Introduced to LT |
+| Budding | Convinced on LT |
+| Flowering | Has specified / recommended LT |
+| Ripening | Repeatedly specifies / recommends LT |
+
+Moving customers up the stages produces **LT qualified projects**. It takes face-to-face work, so 4 customer
+visits a day are mandatory. The tools are in the online **LT Deck** (corporate video, product videos,
+credentials), and the app records which LT Deck content was shown in every meeting.
+
+**Convert – Project navigation.** Projects move Identified → LT specified → Offer submitted → Negotiation → Won / Lost.
+
+**Retain.** Execute the order and collect 100% on the due date.
+
 ## Screens
 
-| Tab | What it does (deck slide) |
+| Tab | What it does |
 |---|---|
-| **Scorecard** | The five lead indicators per owner in Green / Amber / Red (slide 10), the escalation step (slide 11), a 12-day history strip, the Captain's check list of reds for tomorrow's huddle (slide 7), your joint-visit commitment (slide 13) and "your quarter in numbers" (slide 6). |
-| **Huddle & Close** | Morning huddle – collections due, Ripening deals (decision-maker, competitor, price position, today's move), visit plan, help needed (slide 8). Evening close – visits, new projects, collections, orders, spec approvals, POs, offers FTR, tomorrow's first move. |
-| **Pipeline** | Master Plan with stages Sprouting → Ripening, qualified flag, deals stuck 14+ days, Won / Lost. Coverage against 5× the remaining target. |
-| **Orders** | Order ledger; drives booking vs pro-rata target. |
-| **Collections** | Due list by customer and due date, part payments, days late; private customers over 30 days are always Red. |
-| **Offers** | Offers / BOQs / submissions with due date, sent date and First Time Right. |
-| **Saturday review** | Sales, Orders, Pipeline, Collections, Visits and Submissions for each owner, with a named fix per gap (slide 9). Printable. |
-| **Work ethic** | Evidence log for the 20% of increment: Work Ethic Principles, LT Values, LT Ethos (slide 12). |
-| **Settings** | Targets, opening bookings, average order value, working days, holidays, scorecard bands, backup. |
+| **Scorecard** | Six daily indicators per owner in Green / Amber / Red: F2F visits, pipeline vs remaining, booking vs pro-rata, collections, submissions FTR, **LT Deck use**. Escalation step, 12-day history, Captain's check list, joint visits, quarter in numbers. |
+| **Huddle & Close** | Morning huddle in three blocks – **Reach** (stage counts, accounts needing attention, today's visit plan picked from the Master Plan, 4 or more), **Convert** (negotiation deals with decision-maker / competitor / price / today's move, offers awaiting decision, stuck projects) and **Retain** (collections due, execution issues). Evening close logs each meeting against a Master Plan account with the LT Deck content shown and any stage change; visits and new projects are counted from these. |
+| **Master Plan** | Accounts on a Sprouting → Ripening board, with potential, days in stage, last meeting, next action, ◀ ▶ to move stage. Team summary by owner, stage moves, accounts not met in 30+ days, LT Deck usage. |
+| **Projects** | Project navigation, linked to the Master Plan account it came through; Won books the order. |
+| **Orders**, **Collections**, **Offers** | Order ledger, due list, submissions with First Time Right. |
+| **Saturday review** | Master Plan, LT Deck, Sales, Projects, Pipeline, Collections, Visits, Submissions per owner with a named fix. |
+| **Work ethic** | Evidence log for the 20% of increment. |
+| **Settings** | Targets, bands (incl. LT Deck use 80% Green / 50% Amber), follow-up gap, backup and CSV exports. |
 
 ## How the numbers are worked out
 
@@ -42,6 +62,7 @@ from 1 Oct to the day before the tracker start date) so Q3 progress is right. An
 - **Pipeline cover** = qualified open pipeline ÷ remaining target (Green 5×, Amber 4–5×, Red below 4×).
 - **F2F visits** = average over the last 6 working days. A missing evening close counts as zero visits.
 - **Collections** = oldest unpaid due: Green none late, Amber up to 15 days, Red 15+ days (or private 30+).
+- **LT Deck use** = share of meetings in the last 6 working days where LT Deck content was shown.
 - **Submissions** = slips this week (late, still pending past due, or not FTR): 0 Green, 1 Amber, 2+ Red.
 - **Escalation**: Amber → Step 1; Red, or Amber for 2 working weeks → Step 2; Red for 2 working weeks →
   Step 3; booking Red in the last week of the quarter → Step 4.
