@@ -8,16 +8,18 @@ against the PO measures: **Reach** (pipeline), **Convert** (bookings) and **Reta
 
 ## Team and targets (pre-loaded, editable in Settings)
 
-| Owner | FY target |
-|---|---|
-| Sales Head (me) | Rs 30 Cr |
-| Umesh Gour | Rs 6 Cr |
-| Santhosh Kumar | Rs 12 Cr |
-| Mithunn Kumar | Rs 12 Cr |
-| **Team** | **Rs 60 Cr** |
+The tracker covers **Q3 (Oct–Dec 2026) and Q4 (Jan–Mar 2027)** of FY 2026-27 only.
 
-Targets are treated as financial-year targets (Q1 Apr–Jun … Q4 Jan–Mar), split equally per quarter until
-you enter the Q-wise targets. Enter **Booked before tracker** for each quarter so the carry-forward is right.
+| Owner | Target Q3+Q4 | Q3 | Q4 |
+|---|---|---|---|
+| Vinu (Sales Head) | Rs 30 Cr | 15 | 15 |
+| Umesh Gour | Rs 6 Cr | 3 | 3 |
+| Santhosh Kumar | Rs 6 Cr | 3 | 3 |
+| Mithunn Kumar | Rs 6 Cr | 3 | 3 |
+| **Team** | **Rs 48 Cr** | 24 | 24 |
+
+The Q3/Q4 split starts equal; type your own figures in **Settings**. Enter **Q3 booked before tracker** (orders
+from 1 Oct to the day before the tracker start date) so Q3 progress is right. Any Q3 shortfall rolls into Q4.
 
 ## Screens
 
@@ -35,7 +37,7 @@ you enter the Q-wise targets. Enter **Booked before tracker** for each quarter s
 
 ## How the numbers are worked out
 
-- **Quarter target** = Q target + shortfall carried from earlier quarters of the FY.
+- **Quarter target** = Q target + any Q3 shortfall carried into Q4.
 - **Booking vs pro-rata** = booked this quarter ÷ (quarter target × working days elapsed ÷ working days in quarter).
 - **Pipeline cover** = qualified open pipeline ÷ remaining target (Green 5×, Amber 4–5×, Red below 4×).
 - **F2F visits** = average over the last 6 working days. A missing evening close counts as zero visits.
