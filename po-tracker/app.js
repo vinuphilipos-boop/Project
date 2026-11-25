@@ -15,33 +15,51 @@
   ];
   const STATUS_TXT = { g: "Green", a: "Amber", r: "Red", na: "No data" };
   const RANK = { na: 0, g: 1, a: 2, r: 3 };
+  // The tracker covers Q3 and Q4 of FY 2026-27 only (array indices 2 and 3 of each owner's quarters).
+  const PERIOD = { start: "2026-10-01", end: "2027-03-31", qs: [2, 3], label: "Q3+Q4 FY26-27" };
+  const TARGETS = { head: 30, umesh: 6, santhosh: 6, mithunn: 6 }; // Rs Cr for Q3+Q4
+  const half = (t) => [0, 0, Math.round(t / 2 * 100) / 100, Math.round(t / 2 * 100) / 100];
 
   // ---------- defaults ----------
   function defaults() {
-    const owner = (id, name, annual, isHead) => ({
-      id, name, isHead: !!isHead, annual, q: [annual / 4, annual / 4, annual / 4, annual / 4],
-      opening: [0, 0, 0, 0], aovLakh: 25,
+    const owner = (id, name, isHead) => ({
+      id, name, isHead: !!isHead, annual: TARGETS[id], q: half(TARGETS[id]), opening: [0, 0, 0, 0], aovLakh: 25,
     });
     return {
-      version: 1,
+      version: 2,
       settings: {
         trackerStart: "2026-11-16", workDays: [1, 2, 3, 4, 5, 6], holidays: [], deviceOwner: "head",
         bands: { visitsG: 4, visitsA: 3, pipeG: 5, pipeA: 4, bookG: 100, bookA: 80, collA: 15, privRed: 30, subsA: 1 },
         jointPerWeek: 2, stuckDays: 14,
       },
       owners: [
-        owner("head", "Sales Head (me)", 30, true),
-        owner("umesh", "Umesh Gour", 6),
-        owner("santhosh", "Santhosh Kumar", 12),
-        owner("mithunn", "Mithunn Kumar", 12),
+        owner("head", "Vinu", true),
+        owner("umesh", "Umesh Gour"),
+        owner("santhosh", "Santhosh Kumar"),
+        owner("mithunn", "Mithunn Kumar"),
       ],
       daily: {}, projects: [], orders: [], dues: [], subs: [], ethics: [], reviews: {}, snapshots: {}, checks: {},
     };
   }
+  // Version 1 tracked the whole FY with the old targets. Version 2 keeps all logged data but limits
+  // targets to Q3+Q4 with the revised figures, split equally (edit in Settings).
+  function migrate(d) {
+    if (d && d.version === 1 && Array.isArray(d.owners)) {
+      for (const o of d.owners) {
+        if (o.id in TARGETS) { o.annual = TARGETS[o.id]; o.q = half(TARGETS[o.id]); }
+        else { o.q = [0, 0, num(o.q?.[2]), num(o.q?.[3])]; o.annual = o.q[2] + o.q[3]; }
+        o.opening = [0, 0, num(o.opening?.[2]), 0];
+        if (o.id === "head" && o.name === "Sales Head (me)") o.name = "Vinu";
+      }
+      d.snapshots = {}; // computed with the old targets
+      d.version = 2;
+    }
+    return d;
+  }
   function load() {
     try {
-      const d = JSON.parse(localStorage.getItem(KEY));
-      if (d && d.version === 1) {
+      const d = migrate(JSON.parse(localStorage.getItem(KEY)));
+      if (d && d.version === 2) {
         const def = defaults();
         d.settings = { ...def.settings, ...d.settings, bands: { ...def.settings.bands, ...(d.settings || {}).bands } };
         for (const k of ["daily", "reviews", "snapshots", "checks"]) d[k] = d[k] || {};
@@ -51,7 +69,6 @@
     } catch (e) { /* fall through */ }
     return defaults();
   }
-  let S = load();
   const save = () => localStorage.setItem(KEY, JSON.stringify(S));
 
   // ---------- helpers ----------
@@ -75,6 +92,10 @@
   const chip = (st, extra = "") => `<span class="chip ${st}">${STATUS_TXT[st]}</span>${extra ? `<span class="cell-val">${extra}</span>` : ""}`;
   const worst = (arr) => arr.reduce((w, s) => (RANK[s] > RANK[w] ? s : w), "na");
   function toast(msg) { const t = $("#toast"); t.textContent = msg; t.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => (t.hidden = true), 2600); }
+
+  // Load after the helpers above exist (migrate() uses num()).
+  let S = load();
+  save();
 
   function isWork(s) {
     return S.settings.workDays.includes(toD(s).getDay()) && !S.settings.holidays.includes(s);
@@ -109,7 +130,7 @@
   }
   function carryInto(o, fy, q) { // shortfall rolls forward from previous quarters of the FY
     let carry = 0;
-    for (let i = 0; i < q; i++) carry = Math.max(0, num(owner(o).q[i]) + carry - bookedInQuarter(o, fy, i));
+    for (let i = PERIOD.qs[0]; i < q; i++) carry = Math.max(0, num(owner(o).q[i]) + carry - bookedInQuarter(o, fy, i));
     return carry;
   }
   function received(due, asOf) { return (due.receipts || []).filter((r) => !asOf || r.date <= asOf).reduce((t, r) => t + num(r.amount), 0); }
@@ -239,7 +260,8 @@
   }
 
   // ---------- views ----------
-  let D = todayStr();
+  const clampD = (d) => (d < PERIOD.start ? PERIOD.start : d > PERIOD.end ? PERIOD.end : d);
+  let D = clampD(todayStr());
   let selOwner = S.settings.deviceOwner || "head";
   const views = { dashboard, daily, pipeline, orders, dues, subs, review, ethics, settings };
 
@@ -266,21 +288,20 @@
     const Q = quarter(D); const ms = Object.fromEntries(S.owners.map((o) => [o.id, metrics(o.id, D)]));
     const teamEff = S.owners.reduce((t, o) => t + ms[o.id].eff, 0); const teamBooked = S.owners.reduce((t, o) => t + ms[o.id].booked, 0);
     const teamAnnual = S.owners.reduce((t, o) => t + num(o.annual), 0);
-    const fyStart = `${Q.fy}-04-01`;
-    const teamFY = S.owners.reduce((t, o) => t + [0, 1, 2, 3].reduce((u, q) => u + (qBounds(Q.fy, q).start <= D ? bookedInQuarter(o.id, Q.fy, q, D) : 0), 0), 0);
+    const teamFY = S.owners.reduce((t, o) => t + PERIOD.qs.reduce((u, q) => u + (qBounds(Q.fy, q).start <= D ? bookedInQuarter(o.id, Q.fy, q, D) : 0), 0), 0);
     const teamPipe = S.owners.reduce((t, o) => t + ms[o.id].pipe, 0); const teamRem = S.owners.reduce((t, o) => t + ms[o.id].remaining, 0);
     const teamOver = S.owners.reduce((t, o) => t + ms[o.id].overdueAmt, 0);
     const proRataTeam = S.owners.reduce((t, o) => t + ms[o.id].proRata, 0);
     const flags = flagsFor(D);
-    const openingsMissing = S.owners.every((o) => o.opening.every((v) => !num(v))) && S.orders.length === 0;
+    const openingsMissing = S.owners.every((o) => !num(o.opening[2])) && !S.orders.some((x) => x.date < S.settings.trackerStart);
     const checkTime = S.checks[D];
     const wk = weekStart(D);
 
     return `
-    ${openingsMissing ? `<div class="banner"><b>Set up first:</b> enter each owner's Q-wise targets and the orders already booked before ${fmtD(S.settings.trackerStart)} in <a href="#settings">Settings</a>. Until then, Q1–Q2 count as zero booked and the full shortfall rolls into this quarter.</div>` : ""}
+    ${openingsMissing ? `<div class="banner"><b>Set up first:</b> check each owner's Q3 and Q4 targets and enter the Q3 orders already booked before ${fmtD(S.settings.trackerStart)} in <a href="#settings">Settings</a>. Until then, Q3 bookings before that date count as zero.</div>` : ""}
     <div class="tiles">
       <div class="tile"><div class="label">Team booking · ${Q.label}</div><div class="value">${cr(teamBooked)}</div><div class="sub">of ${cr(teamEff)} (incl. carry-forward) · ${pct(teamBooked / proRataTeam * 100)} of pro-rata</div></div>
-      <div class="tile"><div class="label">Team FY booking</div><div class="value">${cr(teamFY)}</div><div class="sub">of ${cr(teamAnnual)} annual target · ${pct(teamFY / teamAnnual * 100)}</div></div>
+      <div class="tile"><div class="label">Team booking · ${PERIOD.label}</div><div class="value">${cr(teamFY)}</div><div class="sub">of ${cr(teamAnnual)} target · ${pct(teamFY / teamAnnual * 100)}</div></div>
       <div class="tile"><div class="label">Qualified pipeline</div><div class="value">${cr(teamPipe)}</div><div class="sub">${teamRem > 0 ? (teamPipe / teamRem).toFixed(1) + "× remaining (need 5×)" : "target met"}</div></div>
       <div class="tile"><div class="label">Overdue collections</div><div class="value">${cr(teamOver)}</div><div class="sub">as of ${fmtD(D)}</div></div>
       <div class="tile"><div class="label">Working days left in ${Q.label}</div><div class="value">${ms.head.wdLeft}</div><div class="sub">of ${ms.head.wdTotal}</div></div>
@@ -294,7 +315,7 @@
           const m = ms[o.id]; const e = escalation(o.id, D, m);
           const days = prevWorkDays(D, 12).reverse();
           return `<tr>
-            <td><b>${esc(o.name)}</b><span class="cell-val">FY target ${cr(num(o.annual))}</span></td>
+            <td><b>${esc(o.name)}</b><span class="cell-val">Q3+Q4 target ${cr(num(o.annual))}</span></td>
             <td>${chip(m.st.visits, isNaN(m.vAvg) ? "no closes yet" : `${m.vAvg.toFixed(1)}/day · wk ${m.weekVisits}/24`)}</td>
             <td>${chip(m.st.pipe, m.remaining > 0 ? `${m.coverage.toFixed(1)}× · ${cr(m.pipe)}` : "target met")}</td>
             <td>${chip(m.st.book, `${pct(m.bookPct)} · ${cr(m.booked)}`)}</td>
@@ -668,10 +689,10 @@
     const list = S.ethics.filter((x) => selOwner === "all" || x.owner === selOwner).sort((a, b) => b.date.localeCompare(a.date));
     const Q = quarter(D);
     return `${ownerTabs(true)}
-    <div class="card"><h2>Evidence summary · FY${String(Q.fy).slice(2)}-${String(Q.fy + 1).slice(2)}</h2>
+    <div class="card"><h2>Evidence summary · ${PERIOD.label}</h2>
       <p class="small muted">20% of the annual increment: Work Ethic Principles 10% · LT Values 5% · LT Ethos 5%. Raise gaps the same week, with one example and one expected change.</p>
       <div class="table-wrap"><table><thead><tr><th>Owner</th>${PRINCIPLES.map((p) => `<th class="num">${p}</th>`).join("")}</tr></thead><tbody>
-      ${S.owners.map((o) => `<tr><td>${esc(o.name)}</td>${PRINCIPLES.map((p) => { const xs = S.ethics.filter((x) => x.owner === o.id && x.principle === p && x.date >= `${Q.fy}-04-01`);
+      ${S.owners.map((o) => `<tr><td>${esc(o.name)}</td>${PRINCIPLES.map((p) => { const xs = S.ethics.filter((x) => x.owner === o.id && x.principle === p && x.date >= PERIOD.start);
         const g = xs.filter((x) => x.kind === "good").length; const b = xs.length - g; return `<td class="num">${g ? `<span title="positive">+${g}</span>` : ""} ${b ? `<b style="color:#9b1f1f" title="gaps">−${b}</b>` : ""}${!g && !b ? "·" : ""}</td>`; }).join("")}</tr>`).join("")}
       </tbody></table></div></div>
     <div class="card no-print"><h2>Log evidence</h2><div class="form">
@@ -697,16 +718,16 @@
   function settings() {
     const s = S.settings; const B = s.bands; const Q = quarter(D);
     const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-    return `<div class="card"><h2>Team and targets (Rs Cr) · FY${String(Q.fy).slice(2)}-${String(Q.fy + 1).slice(2)}</h2>
-      <p class="small muted">Quarters follow the financial year (Q1 Apr–Jun … Q4 Jan–Mar). Quarterly targets default to a quarter of the annual figure – replace them with the Q-wise targets once mailed. "Booked before tracker" is the order value booked in each quarter before ${fmtD(s.trackerStart)}; any shortfall rolls into the next quarter.</p>
-      <div class="table-wrap"><table><thead><tr><th>Name</th><th class="num">Annual</th><th class="num">Q1</th><th class="num">Q2</th><th class="num">Q3</th><th class="num">Q4</th><th class="num">Booked before tracker Q1</th><th class="num">Q2</th><th class="num">Q3</th><th class="num">Q4</th><th class="num">Avg order (lakh)</th></tr></thead><tbody>
+    return `<div class="card"><h2>Team and targets (Rs Cr) · ${PERIOD.label}</h2>
+      <p class="small muted">The tracker covers Q3 (Oct–Dec 2026) and Q4 (Jan–Mar 2027) only. Targets start split equally between Q3 and Q4 – type in your own Q3 and Q4 figures. "Q3 booked before tracker" is the order value booked from 1 Oct to ${fmtD(addDays(s.trackerStart, -1))}. Any Q3 shortfall rolls into Q4.</p>
+      <div class="table-wrap"><table><thead><tr><th>Name</th><th class="num">Target Q3+Q4</th><th class="num">Q3 target</th><th class="num">Q4 target</th><th class="num">Q3 booked before tracker</th><th class="num">Avg order (lakh)</th></tr></thead><tbody>
       ${S.owners.map((o) => `<tr><td><input data-on="${o.id}" value="${esc(o.name)}" /></td><td class="num"><input type="number" step="0.01" data-oa="${o.id}" value="${num(o.annual)}" style="width:5rem"/></td>
-        ${[0, 1, 2, 3].map((i) => `<td class="num"><input type="number" step="0.01" data-oq="${o.id}|${i}" value="${num(o.q[i])}" style="width:5rem"/></td>`).join("")}
-        ${[0, 1, 2, 3].map((i) => `<td class="num"><input type="number" step="0.01" data-oo="${o.id}|${i}" value="${num(o.opening[i])}" style="width:5rem"/></td>`).join("")}
+        ${PERIOD.qs.map((i) => `<td class="num"><input type="number" step="0.01" data-oq="${o.id}|${i}" value="${num(o.q[i])}" style="width:5rem"/></td>`).join("")}
+        <td class="num"><input type="number" step="0.01" data-oo="${o.id}|2" value="${num(o.opening[2])}" style="width:5rem"/></td>
         <td class="num"><input type="number" step="1" data-oaov="${o.id}" value="${num(o.aovLakh)}" style="width:4.5rem"/></td></tr>`).join("")}
       </tbody></table></div>
       <p class="small" id="q-check"></p>
-      <button id="split-btn" type="button" class="secondary">Split each annual target equally into quarters</button></div>
+      <button id="split-btn" type="button" class="secondary">Split each target equally between Q3 and Q4</button></div>
 
     <div class="card"><h2>This device</h2><div class="form">
       <label>This phone/computer belongs to<select id="st-dev">${ownerOpts(s.deviceOwner)}</select></label>
@@ -736,8 +757,8 @@
   }
   bind.settings = () => {
     const s = S.settings;
-    const qcheck = () => { $("#q-check").innerHTML = S.owners.map((o) => { const t = o.q.reduce((a, b) => a + num(b), 0);
-      return Math.abs(t - num(o.annual)) > 0.01 ? `<span class="chip a">Check</span> ${esc(o.name)}: quarters add up to ${cr(t)}, annual is ${cr(num(o.annual))}` : ""; }).filter(Boolean).join("<br>"); };
+    const qcheck = () => { $("#q-check").innerHTML = S.owners.map((o) => { const t = num(o.q[2]) + num(o.q[3]);
+      return Math.abs(t - num(o.annual)) > 0.01 ? `<span class="chip a">Check</span> ${esc(o.name)}: Q3 + Q4 add up to ${cr(t)}, target is ${cr(num(o.annual))}` : ""; }).filter(Boolean).join("<br>"); };
     qcheck();
     const O = (id) => owner(id);
     $$("[data-on]").forEach((i) => i.onchange = () => { O(i.dataset.on).name = i.value.trim() || O(i.dataset.on).name; save(); });
@@ -745,7 +766,7 @@
     $$("[data-oq]").forEach((i) => i.onchange = () => { const [o, q] = i.dataset.oq.split("|"); O(o).q[q] = num(i.value); save(); qcheck(); });
     $$("[data-oo]").forEach((i) => i.onchange = () => { const [o, q] = i.dataset.oo.split("|"); O(o).opening[q] = num(i.value); save(); });
     $$("[data-oaov]").forEach((i) => i.onchange = () => { O(i.dataset.oaov).aovLakh = num(i.value) || 25; save(); });
-    $("#split-btn").onclick = () => { for (const o of S.owners) o.q = [0, 1, 2, 3].map(() => Math.round(num(o.annual) / 4 * 100) / 100); save(); render(); };
+    $("#split-btn").onclick = () => { for (const o of S.owners) o.q = half(num(o.annual)); save(); render(); };
     $("#st-dev").onchange = (e) => { s.deviceOwner = e.target.value; selOwner = s.deviceOwner; save(); };
     $("#st-start").onchange = (e) => { if (e.target.value) { s.trackerStart = e.target.value; save(); } };
     $("#st-joint").onchange = (e) => { s.jointPerWeek = num(e.target.value); save(); };
@@ -755,7 +776,7 @@
     $$("[data-b]").forEach((i) => i.onchange = () => { s.bands[i.dataset.b] = num(i.value); save(); });
     $("#bk-exp").onclick = () => download(`po-tracker-backup-${todayStr()}.json`, JSON.stringify(S, null, 1), "application/json");
     $("#bk-imp").onchange = async (e) => { const f = e.target.files[0]; if (!f) return;
-      try { const d = JSON.parse(await f.text()); if (d.version !== 1 || !Array.isArray(d.owners)) throw 0;
+      try { const d = migrate(JSON.parse(await f.text())); if (d.version !== 2 || !Array.isArray(d.owners)) throw 0;
         if (!confirm("Replace all data on this device with the backup?")) return; localStorage.setItem(KEY, JSON.stringify(d)); S = load(); toast("Backup restored"); render();
       } catch { toast("Not a PO Tracker backup"); } };
     $("#csv-exp").onclick = () => {
@@ -770,7 +791,8 @@
   function download(name, text, type) { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); }
 
   // ---------- boot ----------
-  $("#as-of").onchange = (e) => { if (e.target.value) { D = e.target.value; render(); } };
+  $("#as-of").min = PERIOD.start; $("#as-of").max = PERIOD.end;
+  $("#as-of").onchange = (e) => { if (e.target.value) { D = clampD(e.target.value); render(); } };
   window.addEventListener("hashchange", render);
   render();
 
