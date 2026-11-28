@@ -66,6 +66,12 @@ Both **Master Plan → Import accounts from a sheet** and **Projects → Import 
 - **Several files at once:** pick them together in the file chooser.
 - Pasted rows from Excel, Google Sheets or SPELT instead of a file.
 
+**Orders from SPELT project files:** when a project row has an **Order Amount value Rs**, the import books that order
+to the project's sales officer (dated from an *Order date* column, or the date chosen on the import card), marks the
+project won and keeps SPELT's invoice / collection / pending amounts on the project. Re-importing updates the same order
+instead of adding another; amounts under Rs 1 lakh are flagged for checking. **Orders → Orders by sales officer** shows each
+person's orders and bookings for the quarter and for Q3+Q4.
+
 Matching is by person + customer name (accounts) or person + project name (projects), so re-importing updates instead of
 duplicating. **Download blank template** gives the headings; **Projects → Export projects (CSV)** and
 **Settings → Export Master Plan & meetings (CSV)** produce files that import straight back in.

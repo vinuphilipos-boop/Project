@@ -703,16 +703,20 @@
     if (i < 0) return { error: "No 'Owner' column in the first row. Add one, or choose a person under Import into." };
     return { get: (r) => ownerFromCell(r[i]), col: i };
   }
-  function tally(res, oid, k) { res.by[oid] = res.by[oid] || { added: 0, updated: 0 }; res.by[oid][k]++; res[k]++; }
+  function tally(res, oid, k) { res.by[oid] = res.by[oid] || { added: 0, updated: 0, orders: 0, orderCr: 0 }; res.by[oid][k]++; res[k]++; }
   function importSummary(results) {
-    const tot = { added: 0, updated: 0, linked: 0, by: {}, skipped: [], errors: [] };
+    const tot = { added: 0, updated: 0, linked: 0, by: {}, skipped: [], errors: [], small: [] };
     for (const r of results) {
       if (r.error) { tot.errors.push(r.error); continue; }
-      tot.added += r.added; tot.updated += r.updated; tot.linked += r.linked || 0; tot.skipped.push(...r.skipped);
-      for (const [o, c] of Object.entries(r.by)) { tot.by[o] = tot.by[o] || { added: 0, updated: 0 }; tot.by[o].added += c.added; tot.by[o].updated += c.updated; }
+      tot.added += r.added; tot.updated += r.updated; tot.linked += r.linked || 0; tot.skipped.push(...r.skipped); tot.small.push(...(r.small || []));
+      for (const [o, c] of Object.entries(r.by)) {
+        tot.by[o] = tot.by[o] || { added: 0, updated: 0, orders: 0, orderCr: 0 };
+        for (const k of ["added", "updated", "orders", "orderCr"]) tot.by[o][k] += c[k] || 0;
+      }
     }
-    const parts = Object.entries(tot.by).map(([o, c]) => `${ownerName(o)}: ${c.added} added, ${c.updated} updated`);
+    const parts = Object.entries(tot.by).map(([o, c]) => `${ownerName(o)}: ${c.added} added, ${c.updated} updated${c.orders ? `, ${c.orders} order(s) ${cr(c.orderCr)}` : ""}`);
     if (tot.linked) parts.push(`${tot.linked} linked to Master Plan`);
+    if (tot.small.length) parts.push(`Check: order amount under Rs 1 lakh on ${tot.small.join(", ")}`);
     const unknown = [...new Set(tot.skipped)];
     if (tot.skipped.length) parts.push(`${tot.skipped.length} row(s) skipped – owner not recognised: ${unknown.map((x) => `"${x || "(blank)"}"`).join(", ")}`);
     parts.push(...tot.errors);
@@ -770,24 +774,33 @@
     ["stage", "Stage", ["action status"]], ["closeDate", "Expected order date", ["expected closure"]],
     ["nextMove", "Next move", ["next action"]], ["prob", "Winning probability", ["probability"]],
     ["segment", "Source", ["segment"]], ["createdAt", "Created", ["created at"]], ["notes", "Notes", []],
+    ["orderRs", "Order Amount value Rs", ["order amount", "order amount rs", "order value rs", "order amount (rs)"]],
+    ["orderDate", "Order date", ["po date", "order received date"]],
+    ["invoiceRs", "Invoice Amount value Rs", ["invoice amount", "invoice amount rs", "invoiced rs"]],
+    ["collectionRs", "Collection Amount value Rs", ["collection amount", "collection amount rs", "collected rs"]],
+    ["pendingRs", "Pending Amount value Rs", ["pending amount", "pending amount rs"]],
   ];
+  const rupees = (v) => num(String(v || "").replace(/[,\s₹]|rs\.?/gi, "")); // "20,25,000" -> 2025000
+  const RS_PER_CR = 1e7;
   // SPELT action statuses -> project navigation stages
   const PSTAGE_ALIAS = { "spec in": "LT specified", "specified": "LT specified", "tendering": "Offer submitted", "tender": "Offer submitted",
     "offer": "Offer submitted", "negotiation": "Negotiation", "identified": "Identified", "initial": "Identified", "mockup": "LT specified", "mock-up": "LT specified" };
-  function importProjects(text, ownerId) {
+  // opts.bookOrders: book an order from the Order Amount column; opts.orderDate: date used when the file has no order date
+  function importProjects(text, ownerId, opts = { bookOrders: true, orderDate: D }) {
     const rows = parseRows(text.replace(/^﻿/, ""));
     const head = (rows.shift() || []).map((h) => h.trim().toLowerCase());
     const col = {};
     for (const [f, l, alt] of PROJECT_COLS) { const i = head.findIndex((h) => h === l.toLowerCase() || alt.includes(h)); if (i >= 0) col[f] = i; }
     if (col.name == null) return { error: "No 'Project' column found in the first row." };
     const own = rowOwner(ownerId, head); if (own.error) return { error: own.error };
-    const res = { added: 0, updated: 0, linked: 0, by: {}, skipped: [] };
+    const res = { added: 0, updated: 0, linked: 0, by: {}, skipped: [], small: [] };
     for (const r of rows) {
       if (r.every((c) => !c.trim())) break;
       const g = (f) => (col[f] == null ? "" : String(r[col[f]] ?? "").trim());
       const name = g("name"); if (!name) continue;
       const oid = own.get(r); if (!oid) { res.skipped.push(String(r[own.col] ?? "").trim()); continue; }
       const accs = S.accounts.filter((a) => a.owner === oid && !a.archived);
+      const orderRs = rupees(g("orderRs"));
       const st = g("stage").toLowerCase();
       const won = st === "won"; // brought in as won; the order itself is booked in Orders (it may already be in an opening balance)
       const lost = st === "lost";
@@ -802,7 +815,9 @@
       if (col.value != null) data.value = num(g("value").replace(/,/g, ""));
       if (col.closeDate != null) data.closeDate = toISO(g("closeDate"));
       if (acc) data.accountId = acc.id;
-      const ex = S.projects.find((x) => x.owner === oid && x.name.toLowerCase() === name.toLowerCase());
+      for (const f of ["invoiceRs", "collectionRs", "pendingRs"]) if (col[f] != null && g(f) !== "") data[f.replace("Rs", "Cr")] = rupees(g(f)) / RS_PER_CR;
+      let proj = S.projects.find((x) => x.owner === oid && x.name.toLowerCase() === name.toLowerCase());
+      const ex = proj;
       if (ex) {
         for (const [k, v] of Object.entries(data)) if (v !== "" && v != null) ex[k] = v;
         if (stage && ex.status === "open" && stage !== ex.stage) { ex.stage = stage; ex.stageDate = D; }
@@ -811,9 +826,20 @@
         tally(res, oid, "updated");
       } else {
         const created = toISO(g("createdAt")) || D;
-        S.projects.push({ id: uid(), owner: oid, accountId: "", value: 0, closeDate: "", ...data, stage: stage || (won ? "Negotiation" : "Identified"), qualified: true,
+        S.projects.push(proj = { id: uid(), owner: oid, accountId: "", value: 0, closeDate: "", ...data, stage: stage || (won ? "Negotiation" : "Identified"), qualified: true,
           status: won ? "won" : lost ? "lost" : "open", ...(won ? { wonDate: D } : {}), ...(lost ? { lostDate: D } : {}), stageDate: D, createdAt: created, dm: "", competitor: "", pricePos: "" });
         tally(res, oid, "added");
+      }
+      // An order amount in SPELT means the order is in: book it against this sales officer, once per project.
+      if (opts.bookOrders && orderRs > 0) {
+        const value = orderRs / RS_PER_CR; const date = toISO(g("orderDate")) || opts.orderDate || D;
+        let o = S.orders.find((x) => x.projectId === proj.id);
+        if (o) { o.value = value; o.owner = oid; o.customer = proj.customer; o.project = proj.name; if (g("orderDate")) o.date = date; }
+        else S.orders.push(o = { id: uid(), owner: oid, date, customer: proj.customer, project: proj.name, value, projectId: proj.id, source: "import" });
+        if (proj.status === "open") { proj.status = "won"; proj.wonDate = o.date; }
+        proj.orderCr = value;
+        res.by[oid].orders++; res.by[oid].orderCr += value;
+        if (orderRs < 1e5) res.small.push(`${proj.name} (Rs ${orderRs.toLocaleString("en-IN")})`);
       }
     }
     save(); return res;
@@ -942,10 +968,14 @@
     return `${ownerTabs(true)}
     <div class="card no-print"><h2>Import projects from a sheet</h2>
       <p class="small muted">Choose one or more CSV files, or paste rows copied from Excel / Google Sheets / SPELT (first row = headings).
-      Columns read: Owner, ${PROJECT_COLS.map(([, l]) => l).join(", ")}. For a whole-team file, choose <b>Owner column in the file</b>. SPELT's Spec In / Mockup → LT specified, Tendering → Offer submitted, Negotiation → Negotiation, Won → won (book the order itself in Orders).
+      Columns read: Owner, ${PROJECT_COLS.map(([, l]) => l).join(", ")}. For a whole-team file, choose <b>Owner column in the file</b>. SPELT's Spec In / Mockup → LT specified, Tendering → Offer submitted, Negotiation → Negotiation, Won → won.
       A project already listed for that person with the same name is updated, not duplicated.</p>
       <div class="form"><label>Import into<select id="pi-owner">${importOwnerOpts(selOwner === "all" ? "*" : selOwner)}</select></label>
-        <label>CSV file(s)<input id="pi-file" type="file" multiple accept=".csv,text/csv,text/plain" /></label></div>
+        <label>CSV file(s)<input id="pi-file" type="file" multiple accept=".csv,text/csv,text/plain" /></label>
+        <label class="check"><input id="pi-orders" type="checkbox" checked /> Book orders from the Order Amount column</label>
+        <label>Order date when the file has none<input id="pi-odate" type="date" value="${D}" min="${PERIOD.start}" max="${PERIOD.end}" /></label></div>
+      <p class="small muted">A row with an Order Amount (Rs) books that order to its sales officer and marks the project won; re-importing updates the same order instead of adding another.
+      If an order is already counted in Settings → "Q3 booked before tracker", reduce that figure so it isn't counted twice.</p>
       <textarea id="pi-text" placeholder="…or paste rows here"></textarea>
       <div class="row"><button id="pi-go" type="button">Import</button><button id="pi-tpl" type="button" class="secondary">Download blank template</button>
         <button id="pi-exp" type="button" class="secondary">Export projects (CSV)</button></div>
@@ -970,7 +1000,8 @@
       <div class="table-wrap"><table><thead><tr>${showOwner ? "<th>Owner</th>" : ""}<th>Project</th><th>Customer</th><th class="num">Value</th><th>Stage</th><th>In stage</th><th>Q</th><th>Next move</th><th></th></tr></thead><tbody>
       ${list.map((p) => { const days = p.stageDate ? diffDays(D, p.stageDate) : 0; const stuck = p.status === "open" && days >= S.settings.stuckDays;
         return `<tr>${showOwner ? `<td>${esc(ownerName(p.owner))}</td>` : ""}
-          <td><b>${esc(p.name)}</b><span class="cell-val">${esc(p.segment || "")}${p.closeDate ? " · exp. " + fmtD(p.closeDate) : ""}${p.status === "open" && p.closeDate && p.closeDate < D ? " " + tag("a", "Date passed") : ""}</span>${p.notes ? `<span class="cell-val">${esc(p.notes)}</span>` : ""}</td><td>${esc(p.customer)}${p.accountId ? `<span class="cell-val">via ${esc(accName(p.accountId))}</span>` : ""}</td>
+          <td><b>${esc(p.name)}</b><span class="cell-val">${esc(p.segment || "")}${p.closeDate ? " · exp. " + fmtD(p.closeDate) : ""}${p.status === "open" && p.closeDate && p.closeDate < D ? " " + tag("a", "Date passed") : ""}</span>${(() => { const o = S.orders.find((x) => x.projectId === p.id); return o || p.invoiceCr || p.collectionCr || p.pendingCr
+            ? `<span class="cell-val"><b>${o ? `Order ${cr(num(o.value))} · ${fmtD(o.date)}` : "No order booked"}</b>${p.invoiceCr != null ? ` · invoiced ${cr(p.invoiceCr)}` : ""}${p.collectionCr != null ? ` · collected ${cr(p.collectionCr)}` : ""}${p.pendingCr != null ? ` · pending ${cr(p.pendingCr)}` : ""}</span>` : ""; })()}${p.notes ? `<span class="cell-val">${esc(p.notes)}</span>` : ""}</td><td>${esc(p.customer)}${p.accountId ? `<span class="cell-val">via ${esc(accName(p.accountId))}</span>` : ""}</td>
           <td class="num"><input type="number" step="0.01" data-pv="${p.id}" value="${num(p.value)}" style="width:5.5rem" /></td>
           <td>${p.status === "open" ? `<select data-ps="${p.id}">${PSTAGES.map((s) => `<option ${s === p.stage ? "selected" : ""}>${s}</option>`).join("")}</select>` : `<b>${p.status.toUpperCase()}</b>`}</td>
           <td>${p.status === "open" ? (stuck ? chip("r", days + " days") : days + " d") : ""}</td>
@@ -986,7 +1017,8 @@
       const texts = await readImport($("#pi-file"), $("#pi-text"));
       if (!texts.length) return toast("Choose a file or paste rows first");
       const ow = $("#pi-owner").value;
-      importMsg.pipeline = importSummary(texts.map((t) => importProjects(t, ow)));
+      const opts = { bookOrders: $("#pi-orders").checked, orderDate: $("#pi-odate").value || D };
+      importMsg.pipeline = importSummary(texts.map((t) => importProjects(t, ow, opts)));
       toast(importMsg.pipeline); selOwner = ow === "*" ? "all" : ow; render();
     };
     $("#pi-tpl").onclick = () => download("projects-template.csv", templateCsv(PROJECT_COLS), "text/csv");
@@ -996,6 +1028,9 @@
       for (const p of S.projects) {
         const vals = { name: p.name, customer: p.customer, account: p.accountId ? accName(p.accountId) : "", value: num(p.value), stage: p.status === "won" ? "Won" : p.status === "lost" ? "Lost" : p.stage,
           closeDate: p.closeDate, nextMove: p.nextMove, prob: "", segment: p.segment, createdAt: p.createdAt, notes: p.notes };
+        const ord = S.orders.find((o) => o.projectId === p.id);
+        const rs = (c) => (c ? Math.round(c * RS_PER_CR) : "");
+        Object.assign(vals, { orderRs: ord ? rs(num(ord.value)) : "", orderDate: ord ? ord.date : "", invoiceRs: rs(p.invoiceCr), collectionRs: rs(p.collectionCr), pendingRs: rs(p.pendingCr) });
         rows.push([ownerName(p.owner), ...PROJECT_COLS.map(([f]) => vals[f]), p.status].map(q).join(","));
       }
       download(`po-tracker-projects-${todayStr()}.csv`, "\ufeff" + rows.join("\n"), "text/csv");
@@ -1036,10 +1071,16 @@
       <label>Owner<select id="o-owner">${ownerOpts(selOwner === "all" ? S.settings.deviceOwner : selOwner)}</select></label>
       <label>Date<input id="o-date" type="date" value="${D}" /></label><label>Customer<input id="o-cust" /></label><label>Project<input id="o-proj" /></label>
       <label>Value (Rs Cr)<input id="o-val" type="number" step="0.01" min="0" /></label><button id="o-add" type="button">Add</button></div></div>
+    <div class="card"><h2>Orders by sales officer · ${Q.label}</h2>
+      <div class="table-wrap"><table><thead><tr><th>Owner</th><th class="num">Orders this quarter</th><th class="num">Value this quarter</th><th class="num">Booked incl. opening</th><th class="num">Quarter target</th><th class="num">From SPELT import</th><th class="num">Q3+Q4 booked</th></tr></thead><tbody>
+      ${S.owners.map((o) => { const qo = S.orders.filter((x) => x.owner === o.id && x.date >= Q.start && x.date <= Q.end); const m = metrics(o.id, D);
+        const h2 = PERIOD.qs.reduce((t, q) => t + bookedInQuarter(o.id, Q.fy, q, PERIOD.end), 0);
+        return `<tr><td>${esc(o.name)}</td><td class="num">${qo.length}</td><td class="num">${cr(sumV(qo))}</td><td class="num"><b>${cr(m.booked)}</b></td><td class="num">${cr(m.eff)}</td><td class="num">${qo.filter((x) => x.source === "import").length}</td><td class="num">${cr(h2)} of ${cr(num(o.annual))}</td></tr>`; }).join("")}
+      </tbody></table></div></div>
     <div class="card"><h2>Orders</h2>
       <p class="small">${Q.label} total: <b>${cr(sumV(list.filter((x) => x.date >= Q.start && x.date <= Q.end)))}</b> (excludes opening balances in Settings)</p>
       <div class="table-wrap"><table><thead><tr><th>Date</th><th>Owner</th><th>Customer</th><th>Project</th><th class="num">Value</th><th></th></tr></thead><tbody>
-      ${list.map((x) => `<tr><td>${fmtD(x.date)}</td><td>${esc(ownerName(x.owner))}</td><td>${esc(x.customer)}</td><td>${esc(x.project)}</td><td class="num">${cr(num(x.value))}</td><td><button class="small danger" data-odel="${x.id}">×</button></td></tr>`).join("") || `<tr><td colspan="6" class="muted">No orders yet.</td></tr>`}
+      ${list.map((x) => `<tr><td>${fmtD(x.date)}</td><td>${esc(ownerName(x.owner))}</td><td>${esc(x.customer)}</td><td>${esc(x.project)}${x.source === "import" ? ` <span class="small muted">(SPELT import)</span>` : ""}</td><td class="num">${cr(num(x.value))}</td><td><button class="small danger" data-odel="${x.id}">×</button></td></tr>`).join("") || `<tr><td colspan="6" class="muted">No orders yet.</td></tr>`}
       </tbody></table></div></div>`;
   }
   bind.orders = () => {
