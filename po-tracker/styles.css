@@ -133,3 +133,4 @@ input[type="number"] { width: 6.5rem; }
 .acc .form { grid-template-columns: 1fr; margin: .4rem 0; }
 button:disabled { opacity: .35; cursor: default; }
 @media (max-width: 640px) { .funnel { grid-template-columns: repeat(5, minmax(56px, 1fr)); overflow-x: auto; } .funnel small { display: none; } }
+.acc a { overflow-wrap: anywhere; }

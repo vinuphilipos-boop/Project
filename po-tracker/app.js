@@ -652,6 +652,71 @@
   };
   function localStamp() { const n = new Date(); return `${ymd(n)}T${String(n.getHours()).padStart(2, "0")}:${String(n.getMinutes()).padStart(2, "0")}`; }
 
+  // ----- Master Plan import (CSV or rows pasted from a spreadsheet) -----
+  const IMPORT_COLS = [ // [field, heading, other accepted headings]
+    ["name", "Customer", ["customer / firm", "company name", "account", "name"]], ["type", "Type", []], ["potential", "Potential", []],
+    ["stage", "Stage", ["milestone"]], ["stageDate", "Stage since", ["since"]], ["contact", "Key person", ["contact"]],
+    ["phone", "Phone", ["phone no", "mobile"]], ["email", "Email", ["email id"]], ["city", "City / area", ["city", "area", "location"]],
+    ["leadCr", "Lead value (Rs Cr)", ["lead value", "target"]], ["actualCr", "Actual YTD (Rs Cr)", ["actual ytd", "actual"]],
+    ["nextAction", "Next action", []], ["nextDate", "Next date", ["next action date"]], ["notes", "Notes", []],
+  ];
+  function parseRows(text) {
+    const first = text.split("\n")[0];
+    const delim = (first.match(/\t/g) || []).length > (first.match(/,/g) || []).length ? "\t" : ",";
+    const rows = []; let row = [], cell = "", q = false;
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      if (q) { if (c === '"' && text[i + 1] === '"') { cell += '"'; i++; } else if (c === '"') q = false; else cell += c; }
+      else if (c === '"' && cell === "") q = true;
+      else if (c === delim) { row.push(cell); cell = ""; }
+      else if (c === "\n" || c === "\r") { if (c === "\r" && text[i + 1] === "\n") i++; row.push(cell); rows.push(row); row = []; cell = ""; }
+      else cell += c;
+    }
+    if (cell || row.length) { row.push(cell); rows.push(row); }
+    return rows;
+  }
+  function toISO(v) {
+    v = String(v || "").trim(); if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v;
+    const m = v.match(/^(\d{1,2})[-\/ ]([A-Za-z]{3})[A-Za-z]*[-\/ ](\d{4})/);
+    if (m) { const mo = "janfebmaraprmayjunjulaugsepoctnovdec".indexOf(m[2].toLowerCase()) / 3; if (mo >= 0) return `${m[3]}-${String(mo + 1).padStart(2, "0")}-${m[1].padStart(2, "0")}`; }
+    const n = v.match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4})$/); // dd-mm-yyyy
+    if (n) return `${n[3]}-${n[2].padStart(2, "0")}-${n[1].padStart(2, "0")}`;
+    return "";
+  }
+  function importAccounts(text, ownerId) {
+    const rows = parseRows(text.replace(/^﻿/, ""));
+    const head = (rows.shift() || []).map((h) => h.trim().toLowerCase());
+    const col = {};
+    for (const [f, l, alt] of IMPORT_COLS) { const i = head.findIndex((h) => h === l.toLowerCase() || alt.includes(h)); if (i >= 0) col[f] = i; }
+    if (col.name == null) return { error: "No 'Customer' column found in the first row." };
+    const pick = (list, v, def) => list.find((x) => x.toLowerCase() === String(v || "").trim().toLowerCase()) || def;
+    let added = 0, updated = 0;
+    for (const r of rows) {
+      if (r.every((c) => !c.trim())) break; // stop at the first blank row
+      const g = (f) => (col[f] == null ? "" : String(r[col[f]] ?? "").trim());
+      const name = g("name"); if (!name) continue;
+      const data = { name, contact: g("contact"), phone: g("phone"), email: g("email"), city: g("city"), nextAction: g("nextAction"), notes: g("notes") };
+      if (col.type != null) data.type = pick(ACC_TYPES, g("type"), "Other");
+      if (col.potential != null) data.potential = pick(POTENTIAL, g("potential"), "Medium");
+      if (col.leadCr != null) data.leadCr = num(g("leadCr"));
+      if (col.actualCr != null) data.actualCr = num(g("actualCr"));
+      if (col.nextDate != null) data.nextDate = toISO(g("nextDate"));
+      const stage = col.stage != null ? pick(STAGES, g("stage"), "Sprouting") : null;
+      const since = toISO(g("stageDate")) || D;
+      const ex = S.accounts.find((a) => a.owner === ownerId && !a.archived && a.name.toLowerCase() === name.toLowerCase());
+      if (ex) {
+        for (const [k, v] of Object.entries(data)) if (v !== "" && v != null) ex[k] = v;
+        if (stage && stage !== ex.stage) setStage(ex, stage, D);
+        ex.updatedAt = localStamp(); updated++;
+      } else {
+        S.accounts.push({ id: uid(), owner: ownerId, type: "Other", potential: "Medium", nextDate: "", ...data, stage: stage || "Sprouting",
+          stageDate: since, history: [], createdAt: since, updatedAt: localStamp() });
+        added++;
+      }
+    }
+    save(); return { added, updated };
+  }
+
   // ----- Master Plan (Reach) -----
   let mpPot = "all";
   function master() {
@@ -688,6 +753,14 @@
       <label>Next action date<input id="a-nextd" type="date" /></label>
       <button id="a-add" type="button">Add</button></div></div>
 
+    <div class="card no-print"><h2>Import accounts from a sheet</h2>
+      <p class="small muted">Choose a CSV file, or copy the rows from Excel / Google Sheets and paste them below (first row = headings).
+      Columns read: ${IMPORT_COLS.map(([, l]) => l).join(", ")}. An account already in this person's Master Plan with the same customer name is updated, not duplicated.</p>
+      <div class="form"><label>Import into<select id="im-owner">${ownerOpts(showOwner ? S.settings.deviceOwner : selOwner)}</select></label>
+        <label>CSV file<input id="im-file" type="file" accept=".csv,text/csv,text/plain" /></label></div>
+      <textarea id="im-text" placeholder="…or paste rows here"></textarea>
+      <div class="row"><button id="im-go" type="button">Import</button><span id="im-msg" class="small"></span></div></div>
+
     <div class="card"><div class="row"><h2>Accounts by stage</h2><span class="spacer"></span>
       <label class="small">Potential <select id="a-filter">${[["all", "All"], ...POTENTIAL.map((x) => [x, x])].map(([v, l]) => `<option value="${v}" ${mpPot === v ? "selected" : ""}>${l}</option>`).join("")}</select></label></div>
       <div class="board">${STAGES.map((st, si) => { const xs = accs.filter((a) => a.stage === st).sort((a, b) => POTENTIAL.indexOf(a.potential) - POTENTIAL.indexOf(b.potential) || a.name.localeCompare(b.name));
@@ -697,6 +770,8 @@
           return `<div class="acc ${a.potential === "High" ? "hi" : ""}">
             <div class="row"><b>${esc(a.name)}</b><span class="spacer"></span><span class="small muted">${a.potential === "High" ? "★ High" : esc(a.potential)}</span></div>
             <div class="small muted">${esc(a.type)}${a.city ? " · " + esc(a.city) : ""}${showOwner ? " · " + esc(ownerName(a.owner)) : ""}${a.contact ? "<br>" + esc(a.contact) : ""}</div>
+            ${a.phone || a.email ? `<div class="small">${a.phone ? `<a href="tel:${esc(a.phone)}">${esc(a.phone)}</a>` : ""}${a.phone && a.email ? " · " : ""}${a.email ? `<a href="mailto:${esc(a.email)}">${esc(a.email)}</a>` : ""}</div>` : ""}
+            ${num(a.leadCr) || num(a.actualCr) ? `<div class="small">Lead ${cr(num(a.leadCr))}${num(a.actualCr) ? " · actual YTD " + cr(num(a.actualCr)) : ""}</div>` : ""}
             <div class="small">${a.stageDate ? diffDays(D, a.stageDate) + " d in stage · " : ""}${n} meeting(s), LT Deck in ${nDeck}</div>
             <div class="small">${lt ? "Last met " + fmtD(lt) : "Not met yet"} ${stale ? tag("a", "Follow up") : ""}</div>
             ${a.nextAction || a.nextDate ? `<div class="small">Next: ${esc(a.nextAction)}${a.nextDate ? " · " + fmtD(a.nextDate) : ""} ${a.nextDate && a.nextDate < D ? tag("r", "Overdue") : ""}</div>` : ""}
@@ -709,6 +784,10 @@
               <label>Name<input data-af="name" value="${esc(a.name)}" /></label>
               <label>Type<select data-af="type">${ACC_TYPES.map((x) => `<option ${x === a.type ? "selected" : ""}>${x}</option>`).join("")}</select></label>
               <label>Key person<input data-af="contact" value="${esc(a.contact)}" /></label>
+              <label>Phone<input type="tel" data-af="phone" value="${esc(a.phone)}" /></label>
+              <label>Email<input type="email" data-af="email" value="${esc(a.email)}" /></label>
+              <label>Lead value (Rs Cr)<input type="number" step="0.01" data-af="leadCr" value="${num(a.leadCr) || ""}" /></label>
+              <label>Actual YTD (Rs Cr)<input type="number" step="0.01" data-af="actualCr" value="${num(a.actualCr) || ""}" /></label>
               <label>City / area<input data-af="city" value="${esc(a.city)}" /></label>
               <label>Potential<select data-af="potential">${POTENTIAL.map((x) => `<option ${x === a.potential ? "selected" : ""}>${x}</option>`).join("")}</select></label>
               <label>Owner<select data-af="owner">${ownerOpts(a.owner)}</select></label>
@@ -722,6 +801,14 @@
   }
   bind.master = () => {
     bindOwnerTabs();
+    $("#im-go").onclick = async () => {
+      const f = $("#im-file").files[0]; const text = f ? await f.text() : $("#im-text").value;
+      if (!text.trim()) return toast("Choose a file or paste rows first");
+      const ow = $("#im-owner").value;
+      const r = importAccounts(text, ow);
+      if (r.error) { $("#im-msg").textContent = r.error; return; }
+      toast(`${ownerName(ow)}: ${r.added} added, ${r.updated} updated`); selOwner = ow; render();
+    };
     $("#a-filter").onchange = (e) => { mpPot = e.target.value; render(); };
     $("#a-add").onclick = () => {
       const name = $("#a-name").value.trim(); if (!name) return toast("Enter the customer name");
@@ -737,7 +824,7 @@
       if (i < 0 || i >= STAGES.length) return; setStage(a, STAGES[i], D); save(); toast(`${a.name} → ${STAGES[i]}`); render(); });
     $$("[data-aedit]").forEach((b) => b.onclick = () => { const el = $("#ae-" + b.dataset.aedit); el.hidden = !el.hidden; });
     $$("[data-asave]").forEach((b) => b.onclick = () => { const a = A(b.dataset.asave); const box = $("#ae-" + a.id);
-      $$("[data-af]", box).forEach((i) => { a[i.dataset.af] = i.value.trim(); }); a.updatedAt = localStamp(); save(); toast("Saved"); render(); });
+      $$("[data-af]", box).forEach((i) => { a[i.dataset.af] = i.type === "number" ? num(i.value) : i.value.trim(); }); a.updatedAt = localStamp(); save(); toast("Saved"); render(); });
     $$("[data-adel]").forEach((b) => b.onclick = () => { const a = A(b.dataset.adel);
       if (!confirm(`Remove ${a.name} from the Master Plan? Its meeting history is kept.`)) return; a.archived = true; a.updatedAt = localStamp(); save(); render(); });
   };
@@ -1028,9 +1115,9 @@
       } catch { toast("Not a PO Tracker backup"); } };
     $("#csv-mp").onclick = () => {
       const q = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
-      const rows = [["Owner", "Account", "Type", "Potential", "Stage", "Since", "Last met", "Meetings", "With LT Deck", "Next action", "Next date"].join(",")];
+      const rows = [["Owner", ...IMPORT_COLS.map(([, l]) => l), "Last met", "Meetings", "With LT Deck"].join(",")];
       for (const a of S.accounts.filter((a) => !a.archived)) { const ts = S.touches.filter((t) => t.accountId === a.id);
-        rows.push([ownerName(a.owner), a.name, a.type, a.potential, a.stage, a.stageDate, lastTouch(a.id), ts.length, ts.filter((t) => (t.deck || []).length).length, a.nextAction, a.nextDate].map(q).join(",")); }
+        rows.push([ownerName(a.owner), ...IMPORT_COLS.map(([f]) => f === "leadCr" || f === "actualCr" ? (num(a[f]) || "") : a[f]), lastTouch(a.id), ts.length, ts.filter((t) => (t.deck || []).length).length].map(q).join(",")); }
       rows.push("", ["Date", "Owner", "Account", "Meeting", "LT Deck shown", "Stage before", "Stage after", "New project", "Outcome"].join(","));
       for (const t of [...S.touches].sort((a, b) => a.date.localeCompare(b.date))) rows.push([t.date, ownerName(t.owner), accName(t.accountId), t.type, deckTxt(t.deck), t.stageFrom, t.stageTo, t.newProject ? "yes" : "", t.outcome].map(q).join(","));
       download(`po-tracker-master-plan-${todayStr()}.csv`, rows.join("\n"), "text/csv");
