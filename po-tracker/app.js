@@ -741,7 +741,8 @@
       const g = (f) => (col[f] == null ? "" : String(r[col[f]] ?? "").trim());
       const name = g("name"); if (!name) continue;
       const st = g("stage").toLowerCase();
-      const stage = PSTAGES.find((x) => x.toLowerCase() === st) || PSTAGE_ALIAS[st] || (col.stage != null ? "Identified" : null);
+      const won = st === "won"; // brought in as won; the order itself is booked in Orders (it may already be in an opening balance)
+      const stage = won ? null : PSTAGES.find((x) => x.toLowerCase() === st) || PSTAGE_ALIAS[st] || (col.stage != null ? "Identified" : null);
       const accName0 = g("account").toLowerCase();
       const acc = accName0 ? accs.find((a) => a.name.toLowerCase() === accName0) : null;
       if (acc) linked++;
@@ -756,11 +757,12 @@
       if (ex) {
         for (const [k, v] of Object.entries(data)) if (v !== "" && v != null) ex[k] = v;
         if (stage && ex.status === "open" && stage !== ex.stage) { ex.stage = stage; ex.stageDate = D; }
+        if (won && ex.status === "open") { ex.status = "won"; ex.wonDate = D; }
         updated++;
       } else {
         const created = toISO(g("createdAt")) || D;
-        S.projects.push({ id: uid(), owner: ownerId, accountId: "", value: 0, closeDate: "", ...data, stage: stage || "Identified", qualified: true,
-          status: "open", stageDate: D, createdAt: created, dm: "", competitor: "", pricePos: "" });
+        S.projects.push({ id: uid(), owner: ownerId, accountId: "", value: 0, closeDate: "", ...data, stage: stage || (won ? "Negotiation" : "Identified"), qualified: true,
+          status: won ? "won" : "open", ...(won ? { wonDate: D } : {}), stageDate: D, createdAt: created, dm: "", competitor: "", pricePos: "" });
         added++;
       }
     }
@@ -888,7 +890,7 @@
     return `${ownerTabs(true)}
     <div class="card no-print"><h2>Import projects from a sheet</h2>
       <p class="small muted">Choose a CSV file, or paste rows copied from Excel / Google Sheets / SPELT (first row = headings).
-      Columns read: ${PROJECT_COLS.map(([, l]) => l).join(", ")}. SPELT's Spec In / Mockup → LT specified, Tendering → Offer submitted, Negotiation → Negotiation.
+      Columns read: ${PROJECT_COLS.map(([, l]) => l).join(", ")}. SPELT's Spec In / Mockup → LT specified, Tendering → Offer submitted, Negotiation → Negotiation, Won → won (book the order itself in Orders).
       A project already listed for this person with the same name is updated, not duplicated.</p>
       <div class="form"><label>Import into<select id="pi-owner">${ownerOpts(selOwner === "all" ? S.settings.deviceOwner : selOwner)}</select></label>
         <label>CSV file<input id="pi-file" type="file" accept=".csv,text/csv,text/plain" /></label></div>
