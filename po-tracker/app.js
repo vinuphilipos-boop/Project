@@ -683,18 +683,64 @@
     if (n) return `${n[3]}-${n[2].padStart(2, "0")}-${n[1].padStart(2, "0")}`;
     return "";
   }
+  // Whole-team files: an "Owner" column says whose each row is.
+  const OWNER_HEADS = ["owner", "owner name", "sales person", "salesperson", "sales executive", "executive", "assigned to", "team member", "member"];
+  function ownerFromCell(v) {
+    const t = String(v || "").trim().toLowerCase().replace(/\s+/g, " ");
+    if (!t) return null;
+    const byId = S.owners.find((o) => o.id === t); if (byId) return byId.id;
+    const byName = S.owners.find((o) => o.name.toLowerCase() === t); if (byName) return byName.id;
+    if (["me", "head", "sales head", "self"].includes(t)) return (S.owners.find((o) => o.isHead) || {}).id || null;
+    const first = S.owners.filter((o) => o.name.toLowerCase().split(/[\s(]+/)[0] === t.split(" ")[0]);
+    if (first.length === 1) return first[0].id;
+    const part = S.owners.filter((o) => o.name.toLowerCase().includes(t) || t.includes(o.name.toLowerCase().replace(/\s*\(.*\)/, "")));
+    return part.length === 1 ? part[0].id : null;
+  }
+  // Works out whose each row is: one chosen person, or the file's Owner column ("*").
+  function rowOwner(ownerId, head) {
+    if (ownerId !== "*") return { get: () => ownerId };
+    const i = head.findIndex((h) => OWNER_HEADS.includes(h));
+    if (i < 0) return { error: "No 'Owner' column in the first row. Add one, or choose a person under Import into." };
+    return { get: (r) => ownerFromCell(r[i]), col: i };
+  }
+  function tally(res, oid, k) { res.by[oid] = res.by[oid] || { added: 0, updated: 0 }; res.by[oid][k]++; res[k]++; }
+  function importSummary(results) {
+    const tot = { added: 0, updated: 0, linked: 0, by: {}, skipped: [], errors: [] };
+    for (const r of results) {
+      if (r.error) { tot.errors.push(r.error); continue; }
+      tot.added += r.added; tot.updated += r.updated; tot.linked += r.linked || 0; tot.skipped.push(...r.skipped);
+      for (const [o, c] of Object.entries(r.by)) { tot.by[o] = tot.by[o] || { added: 0, updated: 0 }; tot.by[o].added += c.added; tot.by[o].updated += c.updated; }
+    }
+    const parts = Object.entries(tot.by).map(([o, c]) => `${ownerName(o)}: ${c.added} added, ${c.updated} updated`);
+    if (tot.linked) parts.push(`${tot.linked} linked to Master Plan`);
+    const unknown = [...new Set(tot.skipped)];
+    if (tot.skipped.length) parts.push(`${tot.skipped.length} row(s) skipped – owner not recognised: ${unknown.map((x) => `"${x || "(blank)"}"`).join(", ")}`);
+    parts.push(...tot.errors);
+    return parts.join(" · ") || "Nothing imported";
+  }
+  async function readImport(fileInput, textArea) {
+    const files = [...fileInput.files];
+    if (files.length) return Promise.all(files.map((f) => f.text()));
+    return textArea.value.trim() ? [textArea.value] : [];
+  }
+  function templateCsv(cols) { return "﻿" + ["Owner", ...cols.map(([, l]) => l)].map((h) => `"${h}"`).join(",") + "\n"; }
+  const importMsg = { master: "", pipeline: "" };
+  const importOwnerOpts = (sel) => `<option value="*" ${sel === "*" ? "selected" : ""}>Owner column in the file (whole team)</option>${ownerOpts(sel)}`;
+
   function importAccounts(text, ownerId) {
     const rows = parseRows(text.replace(/^﻿/, ""));
     const head = (rows.shift() || []).map((h) => h.trim().toLowerCase());
     const col = {};
     for (const [f, l, alt] of IMPORT_COLS) { const i = head.findIndex((h) => h === l.toLowerCase() || alt.includes(h)); if (i >= 0) col[f] = i; }
     if (col.name == null) return { error: "No 'Customer' column found in the first row." };
+    const own = rowOwner(ownerId, head); if (own.error) return { error: own.error };
     const pick = (list, v, def) => list.find((x) => x.toLowerCase() === String(v || "").trim().toLowerCase()) || def;
-    let added = 0, updated = 0;
+    const res = { added: 0, updated: 0, by: {}, skipped: [] };
     for (const r of rows) {
       if (r.every((c) => !c.trim())) break; // stop at the first blank row
       const g = (f) => (col[f] == null ? "" : String(r[col[f]] ?? "").trim());
       const name = g("name"); if (!name) continue;
+      const oid = own.get(r); if (!oid) { res.skipped.push(String(r[own.col] ?? "").trim()); continue; }
       const data = { name, contact: g("contact"), phone: g("phone"), email: g("email"), city: g("city"), nextAction: g("nextAction"), notes: g("notes") };
       if (col.type != null) data.type = pick(ACC_TYPES, g("type"), "Other");
       if (col.potential != null) data.potential = pick(POTENTIAL, g("potential"), "Medium");
@@ -703,18 +749,18 @@
       if (col.nextDate != null) data.nextDate = toISO(g("nextDate"));
       const stage = col.stage != null ? pick(STAGES, g("stage"), "Sprouting") : null;
       const since = toISO(g("stageDate")) || D;
-      const ex = S.accounts.find((a) => a.owner === ownerId && !a.archived && a.name.toLowerCase() === name.toLowerCase());
+      const ex = S.accounts.find((a) => a.owner === oid && !a.archived && a.name.toLowerCase() === name.toLowerCase());
       if (ex) {
         for (const [k, v] of Object.entries(data)) if (v !== "" && v != null) ex[k] = v;
         if (stage && stage !== ex.stage) setStage(ex, stage, D);
-        ex.updatedAt = localStamp(); updated++;
+        ex.updatedAt = localStamp(); tally(res, oid, "updated");
       } else {
-        S.accounts.push({ id: uid(), owner: ownerId, type: "Other", potential: "Medium", nextDate: "", ...data, stage: stage || "Sprouting",
+        S.accounts.push({ id: uid(), owner: oid, type: "Other", potential: "Medium", nextDate: "", ...data, stage: stage || "Sprouting",
           stageDate: since, history: [], createdAt: since, updatedAt: localStamp() });
-        added++;
+        tally(res, oid, "added");
       }
     }
-    save(); return { added, updated };
+    save(); return res;
   }
 
   // ----- Projects import (CSV or rows pasted from a spreadsheet) -----
@@ -734,18 +780,21 @@
     const col = {};
     for (const [f, l, alt] of PROJECT_COLS) { const i = head.findIndex((h) => h === l.toLowerCase() || alt.includes(h)); if (i >= 0) col[f] = i; }
     if (col.name == null) return { error: "No 'Project' column found in the first row." };
-    const accs = S.accounts.filter((a) => a.owner === ownerId && !a.archived);
-    let added = 0, updated = 0, linked = 0;
+    const own = rowOwner(ownerId, head); if (own.error) return { error: own.error };
+    const res = { added: 0, updated: 0, linked: 0, by: {}, skipped: [] };
     for (const r of rows) {
       if (r.every((c) => !c.trim())) break;
       const g = (f) => (col[f] == null ? "" : String(r[col[f]] ?? "").trim());
       const name = g("name"); if (!name) continue;
+      const oid = own.get(r); if (!oid) { res.skipped.push(String(r[own.col] ?? "").trim()); continue; }
+      const accs = S.accounts.filter((a) => a.owner === oid && !a.archived);
       const st = g("stage").toLowerCase();
       const won = st === "won"; // brought in as won; the order itself is booked in Orders (it may already be in an opening balance)
-      const stage = won ? null : PSTAGES.find((x) => x.toLowerCase() === st) || PSTAGE_ALIAS[st] || (col.stage != null ? "Identified" : null);
+      const lost = st === "lost";
+      const stage = won || lost ? null : PSTAGES.find((x) => x.toLowerCase() === st) || PSTAGE_ALIAS[st] || (col.stage != null ? "Identified" : null);
       const accName0 = g("account").toLowerCase();
       const acc = accName0 ? accs.find((a) => a.name.toLowerCase() === accName0) : null;
-      if (acc) linked++;
+      if (acc) res.linked++;
       const prob = g("prob");
       let notes = g("notes");
       if (prob) notes = `Winning probability ${prob.replace(/\s*%$/, "")}%` + (notes ? " · " + notes : "");
@@ -753,20 +802,21 @@
       if (col.value != null) data.value = num(g("value").replace(/,/g, ""));
       if (col.closeDate != null) data.closeDate = toISO(g("closeDate"));
       if (acc) data.accountId = acc.id;
-      const ex = S.projects.find((x) => x.owner === ownerId && x.name.toLowerCase() === name.toLowerCase());
+      const ex = S.projects.find((x) => x.owner === oid && x.name.toLowerCase() === name.toLowerCase());
       if (ex) {
         for (const [k, v] of Object.entries(data)) if (v !== "" && v != null) ex[k] = v;
         if (stage && ex.status === "open" && stage !== ex.stage) { ex.stage = stage; ex.stageDate = D; }
         if (won && ex.status === "open") { ex.status = "won"; ex.wonDate = D; }
-        updated++;
+        if (lost && ex.status === "open") { ex.status = "lost"; ex.lostDate = D; }
+        tally(res, oid, "updated");
       } else {
         const created = toISO(g("createdAt")) || D;
-        S.projects.push({ id: uid(), owner: ownerId, accountId: "", value: 0, closeDate: "", ...data, stage: stage || (won ? "Negotiation" : "Identified"), qualified: true,
-          status: won ? "won" : "open", ...(won ? { wonDate: D } : {}), stageDate: D, createdAt: created, dm: "", competitor: "", pricePos: "" });
-        added++;
+        S.projects.push({ id: uid(), owner: oid, accountId: "", value: 0, closeDate: "", ...data, stage: stage || (won ? "Negotiation" : "Identified"), qualified: true,
+          status: won ? "won" : lost ? "lost" : "open", ...(won ? { wonDate: D } : {}), ...(lost ? { lostDate: D } : {}), stageDate: D, createdAt: created, dm: "", competitor: "", pricePos: "" });
+        tally(res, oid, "added");
       }
     }
-    save(); return { added, updated, linked };
+    save(); return res;
   }
 
   // ----- Master Plan (Reach) -----
@@ -806,12 +856,14 @@
       <button id="a-add" type="button">Add</button></div></div>
 
     <div class="card no-print"><h2>Import accounts from a sheet</h2>
-      <p class="small muted">Choose a CSV file, or copy the rows from Excel / Google Sheets and paste them below (first row = headings).
-      Columns read: ${IMPORT_COLS.map(([, l]) => l).join(", ")}. An account already in this person's Master Plan with the same customer name is updated, not duplicated.</p>
-      <div class="form"><label>Import into<select id="im-owner">${ownerOpts(showOwner ? S.settings.deviceOwner : selOwner)}</select></label>
-        <label>CSV file<input id="im-file" type="file" accept=".csv,text/csv,text/plain" /></label></div>
+      <p class="small muted">Choose one or more CSV files, or copy the rows from Excel / Google Sheets and paste them below (first row = headings).
+      Columns read: Owner, ${IMPORT_COLS.map(([, l]) => l).join(", ")}. For a whole-team file, choose <b>Owner column in the file</b> and put each person's name (or first name) in an Owner column.
+      An account already in that person's Master Plan with the same customer name is updated, not duplicated.</p>
+      <div class="form"><label>Import into<select id="im-owner">${importOwnerOpts(showOwner ? "*" : selOwner)}</select></label>
+        <label>CSV file(s)<input id="im-file" type="file" multiple accept=".csv,text/csv,text/plain" /></label></div>
       <textarea id="im-text" placeholder="…or paste rows here"></textarea>
-      <div class="row"><button id="im-go" type="button">Import</button><span id="im-msg" class="small"></span></div></div>
+      <div class="row"><button id="im-go" type="button">Import</button><button id="im-tpl" type="button" class="secondary">Download blank template</button></div>
+      ${importMsg.master ? `<p class="small">${esc(importMsg.master)}</p>` : ""}</div>
 
     <div class="card"><div class="row"><h2>Accounts by stage</h2><span class="spacer"></span>
       <label class="small">Potential <select id="a-filter">${[["all", "All"], ...POTENTIAL.map((x) => [x, x])].map(([v, l]) => `<option value="${v}" ${mpPot === v ? "selected" : ""}>${l}</option>`).join("")}</select></label></div>
@@ -854,13 +906,13 @@
   bind.master = () => {
     bindOwnerTabs();
     $("#im-go").onclick = async () => {
-      const f = $("#im-file").files[0]; const text = f ? await f.text() : $("#im-text").value;
-      if (!text.trim()) return toast("Choose a file or paste rows first");
+      const texts = await readImport($("#im-file"), $("#im-text"));
+      if (!texts.length) return toast("Choose a file or paste rows first");
       const ow = $("#im-owner").value;
-      const r = importAccounts(text, ow);
-      if (r.error) { $("#im-msg").textContent = r.error; return; }
-      toast(`${ownerName(ow)}: ${r.added} added, ${r.updated} updated`); selOwner = ow; render();
+      importMsg.master = importSummary(texts.map((t) => importAccounts(t, ow)));
+      toast(importMsg.master); selOwner = ow === "*" ? "all" : ow; render();
     };
+    $("#im-tpl").onclick = () => download("master-plan-template.csv", templateCsv(IMPORT_COLS), "text/csv");
     $("#a-filter").onchange = (e) => { mpPot = e.target.value; render(); };
     $("#a-add").onclick = () => {
       const name = $("#a-name").value.trim(); if (!name) return toast("Enter the customer name");
@@ -889,13 +941,15 @@
     const showOwner = selOwner === "all";
     return `${ownerTabs(true)}
     <div class="card no-print"><h2>Import projects from a sheet</h2>
-      <p class="small muted">Choose a CSV file, or paste rows copied from Excel / Google Sheets / SPELT (first row = headings).
-      Columns read: ${PROJECT_COLS.map(([, l]) => l).join(", ")}. SPELT's Spec In / Mockup → LT specified, Tendering → Offer submitted, Negotiation → Negotiation, Won → won (book the order itself in Orders).
-      A project already listed for this person with the same name is updated, not duplicated.</p>
-      <div class="form"><label>Import into<select id="pi-owner">${ownerOpts(selOwner === "all" ? S.settings.deviceOwner : selOwner)}</select></label>
-        <label>CSV file<input id="pi-file" type="file" accept=".csv,text/csv,text/plain" /></label></div>
+      <p class="small muted">Choose one or more CSV files, or paste rows copied from Excel / Google Sheets / SPELT (first row = headings).
+      Columns read: Owner, ${PROJECT_COLS.map(([, l]) => l).join(", ")}. For a whole-team file, choose <b>Owner column in the file</b>. SPELT's Spec In / Mockup → LT specified, Tendering → Offer submitted, Negotiation → Negotiation, Won → won (book the order itself in Orders).
+      A project already listed for that person with the same name is updated, not duplicated.</p>
+      <div class="form"><label>Import into<select id="pi-owner">${importOwnerOpts(selOwner === "all" ? "*" : selOwner)}</select></label>
+        <label>CSV file(s)<input id="pi-file" type="file" multiple accept=".csv,text/csv,text/plain" /></label></div>
       <textarea id="pi-text" placeholder="…or paste rows here"></textarea>
-      <div class="row"><button id="pi-go" type="button">Import</button><span id="pi-msg" class="small"></span></div></div>
+      <div class="row"><button id="pi-go" type="button">Import</button><button id="pi-tpl" type="button" class="secondary">Download blank template</button>
+        <button id="pi-exp" type="button" class="secondary">Export projects (CSV)</button></div>
+      ${importMsg.pipeline ? `<p class="small">${esc(importMsg.pipeline)}</p>` : ""}</div>
     <div class="card no-print"><h2>Add project</h2>
       <div class="form">
         <label>Owner<select id="p-owner">${ownerOpts(selOwner === "all" ? S.settings.deviceOwner : selOwner)}</select></label>
@@ -929,11 +983,22 @@
   }
   bind.pipeline = () => {
     $("#pi-go").onclick = async () => {
-      const f = $("#pi-file").files[0]; const text = f ? await f.text() : $("#pi-text").value;
-      if (!text.trim()) return toast("Choose a file or paste rows first");
-      const ow = $("#pi-owner").value; const r = importProjects(text, ow);
-      if (r.error) { $("#pi-msg").textContent = r.error; return; }
-      toast(`${ownerName(ow)}: ${r.added} added, ${r.updated} updated${r.linked ? `, ${r.linked} linked to Master Plan` : ""}`); selOwner = ow; render();
+      const texts = await readImport($("#pi-file"), $("#pi-text"));
+      if (!texts.length) return toast("Choose a file or paste rows first");
+      const ow = $("#pi-owner").value;
+      importMsg.pipeline = importSummary(texts.map((t) => importProjects(t, ow)));
+      toast(importMsg.pipeline); selOwner = ow === "*" ? "all" : ow; render();
+    };
+    $("#pi-tpl").onclick = () => download("projects-template.csv", templateCsv(PROJECT_COLS), "text/csv");
+    $("#pi-exp").onclick = () => {
+      const q = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+      const rows = [["Owner", ...PROJECT_COLS.map(([, l]) => l), "Status"].map(q).join(",")];
+      for (const p of S.projects) {
+        const vals = { name: p.name, customer: p.customer, account: p.accountId ? accName(p.accountId) : "", value: num(p.value), stage: p.status === "won" ? "Won" : p.status === "lost" ? "Lost" : p.stage,
+          closeDate: p.closeDate, nextMove: p.nextMove, prob: "", segment: p.segment, createdAt: p.createdAt, notes: p.notes };
+        rows.push([ownerName(p.owner), ...PROJECT_COLS.map(([f]) => vals[f]), p.status].map(q).join(","));
+      }
+      download(`po-tracker-projects-${todayStr()}.csv`, "\ufeff" + rows.join("\n"), "text/csv");
     };
     bindOwnerTabs();
     $("#p-filter").onchange = (e) => { pipeFilter = e.target.value; render(); };

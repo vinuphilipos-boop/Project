@@ -56,6 +56,20 @@ credentials), and the app records which LT Deck content was shown in every meeti
 | **Work ethic** | Evidence log for the 20% of increment. |
 | **Settings** | Targets, bands (incl. LT Deck use 80% Green / 50% Amber), follow-up gap, backup and CSV exports. |
 
+## Importing for the whole team
+
+Both **Master Plan → Import accounts from a sheet** and **Projects → Import projects from a sheet** accept:
+
+- **One person's file:** choose the person under *Import into*.
+- **A whole-team file:** choose *Owner column in the file (whole team)* and add an **Owner** column. A full name,
+  first name ("Umesh") or "Vinu" / "Sales Head" all work. Rows with an owner the app doesn't recognise are skipped and listed.
+- **Several files at once:** pick them together in the file chooser.
+- Pasted rows from Excel, Google Sheets or SPELT instead of a file.
+
+Matching is by person + customer name (accounts) or person + project name (projects), so re-importing updates instead of
+duplicating. **Download blank template** gives the headings; **Projects → Export projects (CSV)** and
+**Settings → Export Master Plan & meetings (CSV)** produce files that import straight back in.
+
 ## How the numbers are worked out
 
 - **Quarter target** = Q target + any Q3 shortfall carried into Q4.
