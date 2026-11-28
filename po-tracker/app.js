@@ -676,7 +676,7 @@
     return rows;
   }
   function toISO(v) {
-    v = String(v || "").trim(); if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v;
+    v = String(v || "").trim(); const iso = v.match(/^(\d{4}-\d{2}-\d{2})/); if (iso) return iso[1];
     const m = v.match(/^(\d{1,2})[-\/ ]([A-Za-z]{3})[A-Za-z]*[-\/ ](\d{4})/);
     if (m) { const mo = "janfebmaraprmayjunjulaugsepoctnovdec".indexOf(m[2].toLowerCase()) / 3; if (mo >= 0) return `${m[3]}-${String(mo + 1).padStart(2, "0")}-${m[1].padStart(2, "0")}`; }
     const n = v.match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4})$/); // dd-mm-yyyy
@@ -715,6 +715,56 @@
       }
     }
     save(); return { added, updated };
+  }
+
+  // ----- Projects import (CSV or rows pasted from a spreadsheet) -----
+  const PROJECT_COLS = [
+    ["name", "Project", ["project name"]], ["customer", "Customer", ["customer / developer", "client"]],
+    ["account", "Master Plan account", ["account"]], ["value", "Value (Rs Cr)", ["project value cr", "value"]],
+    ["stage", "Stage", ["action status"]], ["closeDate", "Expected order date", ["expected closure"]],
+    ["nextMove", "Next move", ["next action"]], ["prob", "Winning probability", ["probability"]],
+    ["segment", "Source", ["segment"]], ["createdAt", "Created", ["created at"]], ["notes", "Notes", []],
+  ];
+  // SPELT action statuses -> project navigation stages
+  const PSTAGE_ALIAS = { "spec in": "LT specified", "specified": "LT specified", "tendering": "Offer submitted", "tender": "Offer submitted",
+    "offer": "Offer submitted", "negotiation": "Negotiation", "identified": "Identified", "initial": "Identified" };
+  function importProjects(text, ownerId) {
+    const rows = parseRows(text.replace(/^﻿/, ""));
+    const head = (rows.shift() || []).map((h) => h.trim().toLowerCase());
+    const col = {};
+    for (const [f, l, alt] of PROJECT_COLS) { const i = head.findIndex((h) => h === l.toLowerCase() || alt.includes(h)); if (i >= 0) col[f] = i; }
+    if (col.name == null) return { error: "No 'Project' column found in the first row." };
+    const accs = S.accounts.filter((a) => a.owner === ownerId && !a.archived);
+    let added = 0, updated = 0, linked = 0;
+    for (const r of rows) {
+      if (r.every((c) => !c.trim())) break;
+      const g = (f) => (col[f] == null ? "" : String(r[col[f]] ?? "").trim());
+      const name = g("name"); if (!name) continue;
+      const st = g("stage").toLowerCase();
+      const stage = PSTAGES.find((x) => x.toLowerCase() === st) || PSTAGE_ALIAS[st] || (col.stage != null ? "Identified" : null);
+      const accName0 = g("account").toLowerCase();
+      const acc = accName0 ? accs.find((a) => a.name.toLowerCase() === accName0) : null;
+      if (acc) linked++;
+      const prob = g("prob");
+      let notes = g("notes");
+      if (prob) notes = `Winning probability ${prob.replace(/\s*%$/, "")}%` + (notes ? " · " + notes : "");
+      const data = { name, customer: g("customer") || (acc ? acc.name : ""), nextMove: g("nextMove"), segment: g("segment"), notes };
+      if (col.value != null) data.value = num(g("value").replace(/,/g, ""));
+      if (col.closeDate != null) data.closeDate = toISO(g("closeDate"));
+      if (acc) data.accountId = acc.id;
+      const ex = S.projects.find((x) => x.owner === ownerId && x.name.toLowerCase() === name.toLowerCase());
+      if (ex) {
+        for (const [k, v] of Object.entries(data)) if (v !== "" && v != null) ex[k] = v;
+        if (stage && ex.status === "open" && stage !== ex.stage) { ex.stage = stage; ex.stageDate = D; }
+        updated++;
+      } else {
+        const created = toISO(g("createdAt")) || D;
+        S.projects.push({ id: uid(), owner: ownerId, accountId: "", value: 0, closeDate: "", ...data, stage: stage || "Identified", qualified: true,
+          status: "open", stageDate: D, createdAt: created, dm: "", competitor: "", pricePos: "" });
+        added++;
+      }
+    }
+    save(); return { added, updated, linked };
   }
 
   // ----- Master Plan (Reach) -----
@@ -836,6 +886,14 @@
       .sort((a, b) => PSTAGES.indexOf(b.stage) - PSTAGES.indexOf(a.stage) || num(b.value) - num(a.value));
     const showOwner = selOwner === "all";
     return `${ownerTabs(true)}
+    <div class="card no-print"><h2>Import projects from a sheet</h2>
+      <p class="small muted">Choose a CSV file, or paste rows copied from Excel / Google Sheets / SPELT (first row = headings).
+      Columns read: ${PROJECT_COLS.map(([, l]) => l).join(", ")}. SPELT's Spec In → LT specified, Tendering → Offer submitted, Negotiation → Negotiation.
+      A project already listed for this person with the same name is updated, not duplicated.</p>
+      <div class="form"><label>Import into<select id="pi-owner">${ownerOpts(selOwner === "all" ? S.settings.deviceOwner : selOwner)}</select></label>
+        <label>CSV file<input id="pi-file" type="file" accept=".csv,text/csv,text/plain" /></label></div>
+      <textarea id="pi-text" placeholder="…or paste rows here"></textarea>
+      <div class="row"><button id="pi-go" type="button">Import</button><span id="pi-msg" class="small"></span></div></div>
     <div class="card no-print"><h2>Add project</h2>
       <div class="form">
         <label>Owner<select id="p-owner">${ownerOpts(selOwner === "all" ? S.settings.deviceOwner : selOwner)}</select></label>
@@ -856,7 +914,7 @@
       <div class="table-wrap"><table><thead><tr>${showOwner ? "<th>Owner</th>" : ""}<th>Project</th><th>Customer</th><th class="num">Value</th><th>Stage</th><th>In stage</th><th>Q</th><th>Next move</th><th></th></tr></thead><tbody>
       ${list.map((p) => { const days = p.stageDate ? diffDays(D, p.stageDate) : 0; const stuck = p.status === "open" && days >= S.settings.stuckDays;
         return `<tr>${showOwner ? `<td>${esc(ownerName(p.owner))}</td>` : ""}
-          <td><b>${esc(p.name)}</b><span class="cell-val">${esc(p.segment || "")}${p.closeDate ? " · exp. " + fmtD(p.closeDate) : ""}</span></td><td>${esc(p.customer)}${p.accountId ? `<span class="cell-val">via ${esc(accName(p.accountId))}</span>` : ""}</td>
+          <td><b>${esc(p.name)}</b><span class="cell-val">${esc(p.segment || "")}${p.closeDate ? " · exp. " + fmtD(p.closeDate) : ""}${p.status === "open" && p.closeDate && p.closeDate < D ? " " + tag("a", "Date passed") : ""}</span>${p.notes ? `<span class="cell-val">${esc(p.notes)}</span>` : ""}</td><td>${esc(p.customer)}${p.accountId ? `<span class="cell-val">via ${esc(accName(p.accountId))}</span>` : ""}</td>
           <td class="num"><input type="number" step="0.01" data-pv="${p.id}" value="${num(p.value)}" style="width:5.5rem" /></td>
           <td>${p.status === "open" ? `<select data-ps="${p.id}">${PSTAGES.map((s) => `<option ${s === p.stage ? "selected" : ""}>${s}</option>`).join("")}</select>` : `<b>${p.status.toUpperCase()}</b>`}</td>
           <td>${p.status === "open" ? (stuck ? chip("r", days + " days") : days + " d") : ""}</td>
@@ -868,6 +926,13 @@
     </div>`;
   }
   bind.pipeline = () => {
+    $("#pi-go").onclick = async () => {
+      const f = $("#pi-file").files[0]; const text = f ? await f.text() : $("#pi-text").value;
+      if (!text.trim()) return toast("Choose a file or paste rows first");
+      const ow = $("#pi-owner").value; const r = importProjects(text, ow);
+      if (r.error) { $("#pi-msg").textContent = r.error; return; }
+      toast(`${ownerName(ow)}: ${r.added} added, ${r.updated} updated${r.linked ? `, ${r.linked} linked to Master Plan` : ""}`); selOwner = ow; render();
+    };
     bindOwnerTabs();
     $("#p-filter").onchange = (e) => { pipeFilter = e.target.value; render(); };
     $("#p-owner").onchange = (e) => { $("#p-acc").innerHTML = `<option value="">—</option>${accountOpts(e.target.value)}`; };
