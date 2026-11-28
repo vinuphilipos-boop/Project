@@ -727,7 +727,7 @@
   ];
   // SPELT action statuses -> project navigation stages
   const PSTAGE_ALIAS = { "spec in": "LT specified", "specified": "LT specified", "tendering": "Offer submitted", "tender": "Offer submitted",
-    "offer": "Offer submitted", "negotiation": "Negotiation", "identified": "Identified", "initial": "Identified" };
+    "offer": "Offer submitted", "negotiation": "Negotiation", "identified": "Identified", "initial": "Identified", "mockup": "LT specified", "mock-up": "LT specified" };
   function importProjects(text, ownerId) {
     const rows = parseRows(text.replace(/^﻿/, ""));
     const head = (rows.shift() || []).map((h) => h.trim().toLowerCase());
@@ -888,7 +888,7 @@
     return `${ownerTabs(true)}
     <div class="card no-print"><h2>Import projects from a sheet</h2>
       <p class="small muted">Choose a CSV file, or paste rows copied from Excel / Google Sheets / SPELT (first row = headings).
-      Columns read: ${PROJECT_COLS.map(([, l]) => l).join(", ")}. SPELT's Spec In → LT specified, Tendering → Offer submitted, Negotiation → Negotiation.
+      Columns read: ${PROJECT_COLS.map(([, l]) => l).join(", ")}. SPELT's Spec In / Mockup → LT specified, Tendering → Offer submitted, Negotiation → Negotiation.
       A project already listed for this person with the same name is updated, not duplicated.</p>
       <div class="form"><label>Import into<select id="pi-owner">${ownerOpts(selOwner === "all" ? S.settings.deviceOwner : selOwner)}</select></label>
         <label>CSV file<input id="pi-file" type="file" accept=".csv,text/csv,text/plain" /></label></div>
